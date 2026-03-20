@@ -351,6 +351,15 @@ SABAH_TRANSIT_ZONE = Polygon([
 
 def is_in_sabah_transit(lon, lat):
     return SABAH_TRANSIT_ZONE.contains(Point(lon, lat))
+    
+# Taiwan — Central Mountain Range runs N-S, peaks at 3,952m
+TAIWAN_EXCLUSION = Polygon([
+    (120.0, 21.9), (122.0, 21.9), (122.0, 25.3),
+    (120.0, 25.3), (120.0, 21.9),
+])
+
+def is_over_taiwan(lon, lat):
+    return TAIWAN_EXCLUSION.contains(Point(lon, lat))
 
 def is_in_genesis_exclusion_zone(lon, lat):
     """
@@ -980,6 +989,10 @@ def is_over_land(lon, lat, buffer_km=0):
         
         # Borneo (DEM doesn't cover — hardcoded)
         if BORNEO_EXCLUSION.contains(Point(lon, lat)):
+            return True
+        
+        # Taiwan (DEM doesn't cover — hardcoded)
+        if TAIWAN_EXCLUSION.contains(Point(lon, lat)):
             return True
             
         if is_in_sabah_transit(lon, lat):
@@ -2310,6 +2323,8 @@ def preserve_eastern_approaches(storm_df):
         (120.3, 121.5, 16.0, 18.5, "Cordillera Central", 80.0),
         # Zambales Mountains — western Luzon
         (119.8, 120.6, 14.5, 16.5, "Zambales Mtns", 90.0),
+        # Taiwan Central Mountain Range
+        (120.5, 121.5, 22.0, 25.0, "Taiwan Central Range", 75.0),
         # Eastern Mindanao / Pacific Cordillera — Diuata Mtns, etc.
         (125.0, 126.5, 6.5, 10.0, "E. Mindanao Cordillera", 85.0),
         # Central Mindanao highlands (Bukidnon, Mt. Apo area)
