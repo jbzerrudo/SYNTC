@@ -1,50 +1,16 @@
-# Has ERC function. 
-# Most stable_version_20250521. Updated 2025-02 with mountain barrier attenuation.
-# v5 (2026-02): Conservative Sulu Sea weak-TD genesis, Palawan–Mindoro gap hardening,
-#   SCS/Sulu diagnostics. FINAL GENESIS GATE kept as v4 blanket backstop.
-# v5p5 (2026-02): Critical fix for post-processing genesis-over-land bug:
-#   - post_process_synthetic_tracks lat/lon shifts now re-check for land/exclusion;
-#     reverts to un-shifted track if shifted genesis lands on Philippines.
-#   - Luzon mainland exclusion polygon widened (119.3–123.5°E, 14.5–19°N) to cover
-#     Ilocos Norte and Sierra Madre east face.
-#   - Legend placed outside map via fig.legend + bbox_extra_artists.
-# v5p6 (2026-02): SCS genesis intensity calibration (IBTrACS 1977–2023):
-#   FIX: SCS CATEGORY OVERRIDE — storms with genesis ≤120°E now use SCS-specific
-#     lifetime-max distribution (TD 43%, TS 45%, SCS 10%, TY 2%, STY 0%) instead
-#     of PAR-wide distribution. Previously, SCS-genesis storms were assigned TY/STY
-#     at rates matching open-Pacific genesis (~30%), vs observed ~2%.
-#   NOTE: SCS regional wind cap (106kt→95kt at lon≤119°E) retained for Pacific-
-#     origin typhoons transiting SCS; SCS-genesis storms rarely reach this cap now.
-# v7p1 (2026-02): Three-layer SCS genesis intensity defence:
-#   FIX-1: SCS_GENESIS flag column propagated through entire pipeline.
-#   FIX-2: Category-constrained wind clamp after weibull_gev_blend — prevents
-#     initial wind profile from exceeding overridden category ceiling.
-#   FIX-3: Final-pass clamp_scs_genesis_intensity() after ALL processing
-#     (scale_winds_to_target_mean, clean_remnant_low_tracks) enforces IBTrACS
-#     lifetime-max distribution as absolute last step.
-#   FIX-4: Unconditional STY boost (lines ~5071–5097) guarded — was bypassing
-#     ENABLE_STY_THRESHOLD_BOOST=False and re-intensifying SCS storms.
-#   FIX-5: SCS genesis point 0 capped at 30 kt (IBTrACS: 100% TD at genesis).
-# v6 (2026-02): Five-fix patch over v5p2:
-#   FIX-A: Emergency generation uses delta-shift (no more first-point-only overwrite).
-#   FIX-B: FINAL GENESIS GATE uses delta-shift on entire track.
-#   FIX-C: Wind scaling moved to AFTER storm-count adjustment in ensemble path.
-#   FIX-D: Borneo/Brunei geographic floor (_SCS_MIN_LAT=7°N, _SCS_MIN_LON=116°E).
-#   FIX-E: (Inherited from v5p2) Sulu Sea TD sub-zone and Palawan–Mindoro gap.
-# Same as Y2_SYNTC.py from group's Google Drive's file.
-# Has a land decay function that uses a GEBCO DTM (DEM).
-# Has MOUNTAIN BARRIER ATTENUATION: Sierra Madre, Cordillera, Visayan, and Mindanao ranges
-#   enforce that no STY (>=106kt) emerges on the western side of major Philippine islands.
-# Has GENESIS EXCLUSION ZONE: No TC genesis within the Philippine archipelago interior
-#   (117–126.5°E, 5–14.5°N polygon covering Sulu Sea, Visayan Sea, Sibuyan Sea, etc.)
-#   EXCEPT: TD-only genesis is permitted in the central Sulu Sea deep basin
-#   (119.5–121.5°E, 7–9.5°N, centered on IHO centroid ~9°N, 120.5°E)
-#   at historically calibrated rates (~0.39 storms/year from IBTrACS 1923–2023).
-#   The Palawan–Mindoro gap (119–122°E, 10–14.5°N) is hard-excluded.
-# Storm Generator for Philippine Area of Responsibility (PAR) only.
-# Final Version: SYNTC_EX.py --> SYNTC_wDTM_ENSEMBLE_final.py --> SYNTCZerr.
-# Combines the synthetic storm generator with STORM methodology by Bloemendaal et al. (2020).
-# Arranged, compiled, designed, directed, and edited by Jeferson B. Zerrudo (WS-1, DOST-PAGASA) with the help of Claude AI.
+"""
+SYNTC: Synthetic Tropical Cyclone Generator for the Philippine Area of Responsibility (PAR).
+Partly based on the STORM methodology (Bloemendaal et al., 2020) with high-resolution regional defenses.
+
+Core Features:
+- Topographic Land Decay: Uses 20-m DTM for overland attenuation (Sierra Madre, etc.).
+- Genesis Exclusion & Control: Hard-excludes Philippine interior (Palawan-Mindoro gap), 
+  permits historically calibrated Sulu Sea TD genesis, and enforces SCS-specific intensity caps.
+- Advanced Dynamics: Includes Eyewall Replacement Cycle (ERC) modeling.
+
+Author: Jef Zerrudo (WS-1, DOST-PAGASA), with Claude AI assistance.
+2026 Version: 8.0 (2026-03) - Stable build featuring three-layer SCS genesis intensity defense.
+"""
 
 import os
 import sys
@@ -368,15 +334,23 @@ _HIST_SULU_NONZERO_FRAC = 0.289
 # Below ~7°N the Coriolis parameter (f ≈ 1.78×10⁻⁵ s⁻¹) is marginal
 # for organised TC development. IBTrACS shows effectively zero genesis
 # south of 7°N west of 119°E.
-_SCS_MIN_LAT = 7.0    # Below this, Coriolis too weak for TC genesis
+_SCS_MIN_LAT = 5.0    # Before: 7.0, below this, Coriolis too weak for TC genesis
 _SCS_MIN_LON = 110.0  # West of this, too close to Borneo shelf
 
-# Borneo coastline exclusion (DEM doesn't cover non-Philippine land)
+# Pull back NE corner to avoid blocking Sulu Sea exit:
 BORNEO_EXCLUSION = Polygon([
     (109.0, 1.0), (118.0, 1.0), (118.5, 3.5),
-    (118.0, 6.5), (116.5, 7.5), (115.5, 7.5),
+    (118.0, 5.5), (116.5, 6.5), (115.5, 6.5),
     (114.0, 5.5), (109.5, 2.5), (109.0, 1.0),
 ])
+
+SABAH_TRANSIT_ZONE = Polygon([
+    (116.0, 5.5), (118.5, 5.5), (118.5, 7.0),
+    (116.0, 7.0), (116.0, 5.5),
+])
+
+def is_in_sabah_transit(lon, lat):
+    return SABAH_TRANSIT_ZONE.contains(Point(lon, lat))
 
 def is_in_genesis_exclusion_zone(lon, lat):
     """
@@ -636,6 +610,13 @@ def gradual_land_cap(lats, lons, winds):
     modified_winds = winds.copy()
     
     for i in range(len(winds)):
+        # Sabah transit zone — mild decay, not a hard kill
+        if is_in_sabah_transit(lons[i], lats[i]):
+            current_wind_scalar = ensure_scalar(winds[i])
+            if current_wind_scalar > 34:
+                modified_winds[i] = current_wind_scalar * 0.95
+            continue  # Skip normal land checks for Sabah
+            
         if is_over_land(lons[i], lats[i]):
             current_wind = winds[i]
             
@@ -909,7 +890,7 @@ def get_elevation(lon, lat):
         logging.warning(f"ELEV DEBUG: Error sampling DEM at ({lon}, {lat}): {e}")
         return 0.0  # Return 0 in case of error
 
-def is_over_land(lon, lat, buffer_km=30):
+def is_over_land(lon, lat, buffer_km=0):
     """
     Enhanced check if a point is over land using DEM with buffer zone.
     """
@@ -977,11 +958,11 @@ def is_over_land(lon, lat, buffer_km=30):
             return True
         
         # Visayas (central Philippines)
-        if 8.5 <= lat <= 12.5 and 122.5 <= lon <= 126.5:
+        if 8.5 <= lat <= 12.5 and 122.5 <= lon <= 125.0:
             return True
         
         # Mindanao (southern Philippines)
-        if 4.5 <= lat <= 9.5 and 121.5 <= lon <= 126.5:
+        if 4.5 <= lat <= 9.5 and 121.5 <= lon <= 125.5:
             return True
         
         # Additional island regions
@@ -1000,6 +981,9 @@ def is_over_land(lon, lat, buffer_km=30):
         # Borneo (DEM doesn't cover — hardcoded)
         if BORNEO_EXCLUSION.contains(Point(lon, lat)):
             return True
+            
+        if is_in_sabah_transit(lon, lat):
+            return True  # Treated as land — prevents genesis, triggers mild decay
     
     return is_land
 
@@ -4070,7 +4054,7 @@ def generate_genesis_points(df_historical, year, month, count, category=None):
             continue
             
         # CRITICAL ENHANCEMENT: Check if the point is over land
-        if is_over_land(perturbed_lon, perturbed_lat):
+        if is_over_land(perturbed_lon, perturbed_lat, buffer_km=30):
             total_attempts += 1
             continue
             
@@ -4103,7 +4087,7 @@ def generate_genesis_points(df_historical, year, month, count, category=None):
         
         # Strong storms must originate at least 50km offshore
         if category in ('STS', 'TY', 'STY'):
-            if is_over_land(perturbed_lon, perturbed_lat, buffer_km=50):
+            if is_over_land(perturbed_lon, perturbed_lat, buffer_km=30):
                 total_attempts += 1
                 continue
             
@@ -4598,7 +4582,8 @@ def generate_track_dynamics(initial_lat, initial_lon, start_month, duration=48, 
             # Real TCs always drift slightly poleward due to beta effect
             min_northward = 0.03 * trade_strength * np.random.uniform(0.5, 1.5)
             if dlat1 < min_northward:
-                dlat1 = min_northward + abs(dlat1) * 0.1  # Gentle redirect
+                if np.random.random() < 0.80:  # 80% redirected, 20% allowed through
+                    dlat1 = min_northward + abs(dlat1) * 0.1  # Gentle redirect
             
             # Tighten eastward clip at low latitudes
             max_dlon_east = max_dlon * max(0.1, 0.8 - 0.7 * trade_strength)
@@ -4699,7 +4684,7 @@ def generate_synthetic_storm(year, month, historical_positions=None, historical_
         _sulu_ok = (storm_category == 'TD' and _in_excl
                     and is_in_sulu_sea_genesis_zone(initial_lon, initial_lat)
                     and not is_over_land(initial_lon, initial_lat))
-        if is_over_land(initial_lon, initial_lat) or (_in_excl and not _sulu_ok):
+        if is_over_land(initial_lon, initial_lat, buffer_km=30) or (_in_excl and not _sulu_ok):
             # Push genesis to safe open ocean east of the exclusion zone
             for _attempt in range(20):
                 initial_lon = np.random.uniform(127.0, 133.0)
@@ -5617,7 +5602,7 @@ def generate_synthetic_storm(year, month, historical_positions=None, historical_
         gen_lat = storm_df.iloc[0]['LAT']
         gen_wind = ensure_scalar(storm_df.iloc[0]['WIND'], default=25.0)
 
-        _on_land = is_over_land(gen_lon, gen_lat)
+        _on_land = is_over_land(gen_lon, gen_lat, buffer_km=30)
         _in_excl = is_in_genesis_exclusion_zone(gen_lon, gen_lat)
 
         # Sulu Sea TD exception
