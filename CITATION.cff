@@ -1,0 +1,63 @@
+cff-version: 1.2.0
+title: "SYNTC-AI: a learned synthetic tropical cyclone generator for the Philippine Area of Responsibility"
+message: "If you use this software, please cite it using these metadata."
+type: software
+authors:
+  - family-names: Zerrudo
+    given-names: Jef
+    affiliation: &pagasa "Department of Science and Technology - Philippine Atmospheric, Geophysical and Astronomical Services Administration (PAGASA)"
+    email: jbzerrudo@pagasa.dost.gov.ph
+    orcid: "https://orcid.org/0000-0001-7892-0999"
+  - family-names: Arruejo
+    given-names: "Sharon Juliet"
+    affiliation: *pagasa
+  - family-names: Abdon
+    given-names: "Sheila Joy"
+    affiliation: *pagasa
+  - family-names: David
+    given-names: Shirley
+    affiliation: *pagasa
+  - family-names: Aggasid
+    given-names: "Vivian Gay"
+    affiliation: *pagasa
+abstract: >-
+  SYNTC-AI generates synthetic tropical cyclone catalogues for the Philippine
+  Area of Responsibility. Track propagation and intensity evolution are learned
+  as conditional densities from the IBTrACS Western North Pacific record
+  (1977-2023), replacing the hand-tuned parameterisations of its predecessor
+  SynTC. Terrain-dependent wind decay, central pressure, radius of maximum wind
+  and the radial wind profile are taken from published relations and used
+  unchanged. On held-out years the learned track propagator improves track
+  density correlation over a STORM-style binned autoregression from 0.845 to
+  0.887.
+keywords:
+  - tropical cyclone
+  - synthetic storm generator
+  - Philippine Area of Responsibility
+  - western North Pacific
+  - mixture density network
+  - hazard assessment
+license: MIT
+repository-code: "https://github.com/jbzerrudo/SYNTC"
+version: 1.0.0
+references:
+  - type: article
+    authors:
+      - family-names: Bloemendaal
+        given-names: Nadia
+    title: "Generation of a global synthetic tropical cyclone hazard dataset using STORM"
+    year: 2020
+  - type: article
+    authors:
+      - family-names: Willoughby
+        given-names: H. E.
+    title: "Parametric representation of the primary hurricane vortex. Part II"
+    year: 2006
+  - type: article
+    authors:
+      - family-names: Zerrudo
+        given-names: Jef
+      - family-names: Servando
+        given-names: Nathaniel T.
+    title: "How much do mountains matter? Revisiting the Kaplan-DeMaria model for terrain-dependent tropical cyclone wind decay in the Philippines"
+    year: 2026
