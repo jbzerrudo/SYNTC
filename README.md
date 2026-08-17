@@ -1,5 +1,7 @@
 # SynTC
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21985553.svg)](https://doi.org/10.5281/zenodo.21985553)
+
 A synthetic tropical cyclone generator for the Philippine Area of Responsibility,
 and the analysis code for every figure and table in
 
@@ -150,5 +152,9 @@ land receive a default elevation.
 
 ## Licence and citation
 
-MIT, see `LICENSE`. Citation metadata is in `CITATION.cff`. If you use this
-code, please cite both the software (Zenodo DOI, below) and the paper.
+MIT, see `LICENSE`. Citation metadata is in `CITATION.cff`.
+
+If you use this code, cite both the software and the paper. For the software
+use the concept DOI, **10.5281/zenodo.21985553**, which always resolves to the
+current version. The release accompanying the paper is v1.0.0,
+10.5281/zenodo.21985554.

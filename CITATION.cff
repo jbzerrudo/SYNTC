@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "SYNTC-AI: a learned synthetic tropical cyclone generator for the Philippine Area of Responsibility"
+title: "SynTC: a learned synthetic tropical cyclone generator for the Philippine Area of Responsibility"
 message: "If you use this software, please cite it using these metadata."
 type: software
 authors:
@@ -40,6 +40,7 @@ keywords:
 license: MIT
 repository-code: "https://github.com/jbzerrudo/SYNTC"
 version: 1.0.0
+doi: 10.5281/zenodo.21985553
 references:
   - type: article
     authors:
