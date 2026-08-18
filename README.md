@@ -5,7 +5,7 @@
 A synthetic tropical cyclone generator for the Philippine Area of Responsibility,
 and the analysis code for every figure and table in
 
-> Zerrudo, J.B., Arruejo, S.J., Abdon, S.J., David, S., Aggasid, V.G.
+> Zerrudo, J.B., Abdon, S.J., Arruejo, S.J., David, S., Aggasid, V.G.
 > *Philippine Tropical Cyclone Extreme-Value Analysis and Intensity Hotspots
 > from Historical Data and Synthetic Storm Modeling.*
 > Submitted to Tropical Cyclone Research and Review.
@@ -19,8 +19,8 @@ disagrees with the record, the disagreement is reported rather than removed.
 
 ## What is here
 
-Everything in this repository was used to produce the paper. Nothing else is
-included.
+Everything in this repository was used to produce the paper, together with the
+plotting variants the figures were checked against. Nothing else is included.
 
 **The model**
 
@@ -53,9 +53,28 @@ included.
 | `plot_seasonality.py` | the seasonal cycle of PAR entry |
 | `plot_tracks.py` | the seasonal migration of the track corridor |
 | `genesis_forecast.py` | the tool: probability of passage from one genesis point |
+| `replot_plume.py` | redraws the plume on a PAR-focused window, from the CSVs the tool already wrote |
 | `make_table_return_periods.py` | Table 2, as LaTeX, straight from the CSV |
+| `make_table_spatial.py` | Table 3, as LaTeX, straight from the CSV |
 | `to_arcgis.py` | reshapes a run for the ArcGIS scripts below |
 | `arcgis_csv2pts2segments.py`, `arcgis_hotspot_batch_final.py` | the ArcGIS side, used for the return-period track maps |
+
+### The genesis plume
+
+`genesis_forecast.py` writes two files per query, a per-cell passage field and
+every simulated track. The pair for 13°N, 132°E in October is committed here,
+`genesis_13N_132E_m10_passage.csv` and `genesis_13N_132E_m10_tracks.csv`, so
+`replot_plume.py` runs without re-simulating anything:
+
+```
+python replot_plume.py --run . --dtm dtm_phil_1km.tif --style field
+```
+
+`--style field` draws the probability field with a north arrow and a degree
+graticule, clipped to 112–140°E and 2–28°N. `--style spaghetti` drops the
+field and draws the individual tracks instead. The window holds 48.7% of the
+passage probability; the remainder lies northeast of it, where storms recurve
+out of PAR.
 
 ## Reproducing the paper
 
@@ -92,7 +111,7 @@ hotspot panels), then every plotting script in order.
 | 7 hotspots by class | `plot_results.py`, as figure 3 |
 | 8 seasonality | `python plot_seasonality.py --run run03 --ibtracs IB --dtm DTM` |
 | 9 seasonal shift | `python plot_tracks.py --run run03 --ibtracs IB --dtm DTM` |
-| 10 genesis plume | `python genesis_forecast.py --model run03/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 2000` |
+| 10 genesis plume | `python genesis_forecast.py --model run03/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 2000`, then `python replot_plume.py --run . --dtm DTM --style field` for the PAR-focused version |
 | 11 filtering effect | `python plot_filtering.py --run run03 --ibtracs IB --dtm DTM` |
 | 12 hotspots by month | `plot_results.py`, as figure 3 |
 | Table 2 | `python make_table_return_periods.py --run run03 > tab_return_periods.tex` |

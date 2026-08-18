@@ -8,11 +8,11 @@ authors:
     affiliation: &pagasa "Department of Science and Technology - Philippine Atmospheric, Geophysical and Astronomical Services Administration (PAGASA)"
     email: jbzerrudo@pagasa.dost.gov.ph
     orcid: "https://orcid.org/0000-0001-7892-0999"
-  - family-names: Arruejo
-    given-names: "Sharon Juliet"
-    affiliation: *pagasa
   - family-names: Abdon
     given-names: "Sheila Joy"
+    affiliation: *pagasa
+  - family-names: Arruejo
+    given-names: "Sharon Juliet"
     affiliation: *pagasa
   - family-names: David
     given-names: Shirley
