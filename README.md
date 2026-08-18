@@ -6,8 +6,8 @@ A synthetic tropical cyclone generator for the Philippine Area of Responsibility
 and the analysis code for every figure and table in
 
 > Zerrudo, J.B., Abdon, S.J., Arruejo, S.J., David, S., Aggasid, V.G.
-> *Philippine Tropical Cyclone Extreme-Value Analysis and Intensity Hotspots
-> from Historical Data and Synthetic Storm Modeling.*
+> *SynTC: Learning Tropical Cyclone Tracks and Intensity in the Philippine
+> Area of Responsibility.*
 > Submitted to Tropical Cyclone Research and Review.
 
 Track propagation and intensity evolution are learned as conditional densities

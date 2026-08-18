@@ -1,6 +1,6 @@
 {
   "title": "SynTC: a learned synthetic tropical cyclone generator for the Philippine Area of Responsibility",
-  "description": "Generator and analysis code for every figure and table in Zerrudo et al., Philippine Tropical Cyclone Extreme-Value Analysis and Intensity Hotspots from Historical Data and Synthetic Storm Modeling. Track propagation and intensity evolution are learned as conditional densities from IBTrACS Western North Pacific 1977-2023 using mixture density networks; terrain-dependent wind decay, central pressure, radius of maximum wind and the radial wind profile are taken from published relations and used unchanged.",
+  "description": "Generator and analysis code for every figure and table in Zerrudo et al., SynTC: Learning Tropical Cyclone Tracks and Intensity in the Philippine Area of Responsibility. Track propagation and intensity evolution are learned as conditional densities from IBTrACS Western North Pacific 1977-2023 using mixture density networks; terrain-dependent wind decay, central pressure, radius of maximum wind and the radial wind profile are taken from published relations and used unchanged.",
   "license": "MIT",
   "upload_type": "software",
   "creators": [
