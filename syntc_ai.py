@@ -1,6 +1,6 @@
 """
 SYNTC-AI: synthetic tropical cyclone generator for the Philippine Area of
-Responsibility, learned from IBTrACS 1977-2024.
+Responsibility, learned from IBTrACS 1977-2023.
 
     python syntc_ai.py --years 2026 2125 --ensembles 20 --out D:/2026/SYNTC-AI/run01
 
@@ -28,21 +28,28 @@ Two honest limitations, stated here rather than discovered later:
     overland ceiling is a property of that wind convention. TOK_WIND is only
     reported at roughly TS strength and above, so tropical depressions are
     weakly constrained.
-  * The overland ceiling is still not reproduced. Over 600 simulated years the
-    model reaches about 121 kt over Philippine land against an observed record
-    maximum of 110 kt (Haiyan, 2013). Set CONFIG.overland_cap_kt to enforce it,
-    but know that you are then imposing the result rather than predicting it.
-    Default is None, i.e. no cap, i.e. honest.
-  * Super typhoons are under-produced: about 2.9% of PAR track points against
-    5.6% observed. The 100-year return level is right, so the distribution has
-    the correct ceiling but too little mass just below it.
+  * The overland maximum is modestly high. Over the 2,000 simulated years of
+    run03 the highest wind with the centre over Philippine land is 115 kt in
+    the median ensemble, against a benchmark of 112 kt for a 100-season draw
+    from the observed overland annual maxima, and six of twenty ensembles
+    exceed the 95th percentile of that benchmark where one would be expected.
+    check_run.py fails on this, deliberately. Set CONFIG.overland_cap_kt to
+    force it down, but know that you are then imposing the result rather than
+    predicting it. Default is None, i.e. no cap, i.e. honest.
+  * Super typhoons are under-produced: 2.4% of PAR track points against 6.2%
+    observed. The number of storms reaching that intensity is about right, so
+    the deficit is residence time rather than attainment.
+  * No extratropical transition is modelled, so recurved storms stay alive too
+    far north: 36.4% of synthetic PAR-entering track points lie north of 25N
+    against 14.7% observed.
 
 Calibration status
 ------------------
-The 100-year PAR return level is 125.6 kt over 600 simulated years, against the
-published extreme-value estimate of 126.0 +/- 3.3 kt. That agreement comes from
-one calibrated parameter, intensity.SATURATION_K; everything else is fitted to
-the IBTrACS record or taken from published equations.
+The 100-year PAR return level of the observed record is 126.4 +/- 3.3 kt
+(Weibull on 47 annual maxima); run03 gives 124.9 +/- 1.0 kt over 2,000
+simulated years. That agreement comes from one calibrated parameter,
+intensity.SATURATION_K; everything else is fitted to the IBTrACS record or
+taken from published equations.
 
 Author: Jef Zerrudo (DOST-PAGASA). Track and intensity models built with
 Claude. Terrain decay from Zerrudo and Servando; wind profile from Willoughby
@@ -64,6 +71,7 @@ from scipy.stats import gaussian_kde
 import data as D
 import intensity as I
 import terrain
+import windconv
 from models import MDNPropagator
 
 
@@ -132,6 +140,32 @@ class Config:
 
     # --- physics ------------------------------------------------------
     decay_a: float = 1.43e-4         # Zerrudo & Servando (R1)
+    # The track propagator is fitted on USA_WIND, the JTWC 1-minute field, while
+    # the generator carries a 10-minute wind, so the feature is on a different
+    # scale at generation time than during fitting: at 100 kt (10-minute) the
+    # storms it trained on were labelled about 122 kt. Setting this True
+    # converts through windconv.py and removes the mismatch.
+    #
+    # Default False, because it was measured and it does not matter. Five
+    # ensembles from one fitted model, with and without the conversion and with
+    # the same seeds, differ by 0.07 PAR track points per storm, 0.01 degrees of
+    # mean PAR latitude, 0.1 points of land-crossing rate and 0.1 kt of mean PAR
+    # wind; the Murphy skill moves by at most 0.06 and its sign is not
+    # consistent across classes, with the aggregate 0.03 to 0.06 LOWER with the
+    # conversion. The displacement density is close to insensitive to the
+    # intensity feature once position, previous displacement, month and age are
+    # given, so the network is left querying the scale it was fitted on.
+    track_wind_1min: bool = False
+    # Whether to weight the wind-time term of the decay relation by the
+    # footprint land fraction. False is the published Zerrudo and Servando
+    # relation, unmodified. The weight was introduced on the grounds that a
+    # centre-only land test gives no decay on the approach; it does not, because
+    # hbar is already footprint-weighted and is not gated by this flag, so the
+    # weight roughly doubles approach decay rather than creating it. It also
+    # brakes inland decay, where the median land fraction under a centre-over-
+    # land point is 0.534, by about 0.9 kt per step and by 2.4 kt per step above
+    # 100 kt. See intensity.physics_dv.
+    decay_land_fraction: bool = False
     terrain_footprint_km: float = 75.0
     p_env_hpa: float = 1010.0
     # Set to a number (e.g. 106.0) to force the overland ceiling. Leaving it
@@ -163,20 +197,47 @@ def category_of(wind_kt, cfg=CONFIG):
 
 
 def central_pressure(wind_kt, lat_deg, cfg=CONFIG):
-    """Atkinson and Holliday (1977) with the Holland-style latitude term."""
+    """Atkinson and Holliday (1977), 10-minute form, used as published.
+
+    The coefficient 5.896 is the published 6.7 times the 0.88 one-minute to
+    ten-minute factor, so this takes the TOK_WIND convention the model carries.
+
+    There is no latitude term. An earlier version multiplied the whole pressure
+    by (1.5 - 0.5 cos|phi|)/1.5, which is a factor of about 0.68 at Philippine
+    latitudes and put every point in the released catalogue near 680 hPa,
+    against a world record of 870. Applying the same factor to the pressure
+    DEFICIT instead is dimensionally sensible but empirically worse: scored
+    against the 48,334 points in the WNP record 1977-2023 carrying both
+    TOK_WIND and TOK_PRES, the deficit form gives a bias of +10.10 hPa
+    (MAE 10.54, RMSE 14.19) and misses the depth of intense storms by 33 hPa,
+    while the unadjusted relation gives a bias of -1.83 hPa (MAE 4.68,
+    RMSE 5.91). The latitude term is therefore dropped rather than repaired.
+    """
     v = np.asarray(wind_kt, dtype=float)
-    phi = np.radians(np.asarray(lat_deg, dtype=float))
-    base = cfg.p_env_hpa - (v / 5.896) ** (1.0 / 0.644)
-    return base * (1.5 - 0.5 * np.cos(np.abs(phi))) / 1.5
+    return cfg.p_env_hpa - (v / 5.896) ** (1.0 / 0.644)
+
+
+NM_PER_KM = 1.852
 
 
 def radius_max_wind(wind_kt, lat_deg):
-    """Knaff et al. (2015) climatological RMW, in km."""
+    """Knaff et al. (2015) climatological RMW, converted to km.
+
+    Knaff, J. A., S. P. Longmore, R. T. DeMaria and D. A. Molenar, 2015:
+    Improved tropical-cyclone flight-level wind estimates using routine infrared
+    satellite reconnaissance. J. Appl. Meteor. Climatol., 54, 463-478, Eq. (1).
+    Their RMW is in NAUTICAL MILES (their Fig. 2 caption); an earlier version of
+    this function returned the raw value labelled as km, which made every radius
+    in the released catalogue too small by a factor of 1.852.
+
+    Vmax is in knots and phi is latitude in degrees; the clip is applied after
+    the conversion, in km.
+    """
     v = np.asarray(wind_kt, dtype=float)
     phi = np.radians(np.asarray(lat_deg, dtype=float))
-    rmw = (218.3784 - 1.2014 * v + (v / 10.9884) ** 2
-           - (v / 35.3052) ** 3 - 145.5090 * np.cos(phi))
-    return np.clip(rmw, 10.0, 300.0)
+    rmw_nm = (218.3784 - 1.2014 * v + (v / 10.9844) ** 2
+              - (v / 35.3052) ** 3 - 145.5090 * np.cos(phi))
+    return np.clip(rmw_nm * NM_PER_KM, 10.0, 300.0)
 
 
 def willoughby_profile(r_km, vmax_kt, rmax_km, lat_deg):
@@ -307,6 +368,10 @@ class SyntcAI:
     def fit(self, verbose=True):
         cfg = self.cfg
         terrain.DTM_PATH = cfg.dtm
+        # These live at module scope in intensity.py because physics_dv is also
+        # called from build_intensity_transitions, which has no cfg. Set them
+        # from cfg here so a run is described entirely by its config.json.
+        I.USE_LAND_FRACTION = cfg.decay_land_fraction
 
         if verbose:
             print("loading IBTrACS ...")
@@ -415,7 +480,9 @@ class SyntcAI:
 
             tf = pd.DataFrame({
                 "lat": lat[idx], "lon": lon[idx], "u_prev": u[idx],
-                "v_prev": v[idx], "vmax": wind[idx],
+                "v_prev": v[idx],
+                "vmax": (windconv.to_1min(wind[idx])
+                         if getattr(cfg, "track_wind_1min", False) else wind[idx]),
                 "month_sin": msin, "month_cos": mcos, "age_h": age,
                 "is_genesis": 1.0 if step == 0 else 0.0,
             })[D.FEATURES]

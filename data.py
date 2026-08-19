@@ -29,7 +29,8 @@ LAT_MIN, LAT_MAX = 0.0, 50.0
 FEATURES = [
     "lat", "lon",          # position
     "u_prev", "v_prev",    # previous 3-h displacement (deg), the motion vector
-    "vmax",                # intensity, kt (1-min sustained, USA_WIND)
+    "vmax",                # intensity, kt (1-min sustained, USA_WIND);
+                           # see windconv.py for the generation-time conversion
     "month_sin", "month_cos",
     "age_h",               # hours since genesis
     "is_genesis",          # 1 on the first propagated step, else 0
@@ -65,10 +66,14 @@ def load_tracks(path, season_min=1977, season_max=2024, synoptic_only=False,
     df["lat"] = pd.to_numeric(df.LAT, errors="coerce")
     df["lon"] = pd.to_numeric(df.LON, errors="coerce")
 
-    # Intensity: USA_WIND (1-min) is the most complete field in the WNP record.
+    # Intensity: USA_WIND (1-min) is the most complete field in the WNP record,
+    # present for 87% of synoptic points against 55% for TOK_WIND. The track
+    # propagator is therefore fitted in the 1-minute convention, and the
+    # generator converts its 10-minute wind before querying it (windconv.py).
     # Gaps are filled inside each storm by time interpolation, then by the
-    # storm's own median, so an occasional missing wind does not drop a whole
-    # transition.
+    # DATASET median, so an occasional missing wind does not drop a whole
+    # transition. The fallback reaches 1,691 of 44,791 synoptic points, 120
+    # storms of 1,520 having no USA_WIND at any point.
     df["vmax"] = pd.to_numeric(df.USA_WIND, errors="coerce")
 
     df = df.dropna(subset=["time", "lat", "lon"])

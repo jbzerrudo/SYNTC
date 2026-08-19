@@ -57,24 +57,83 @@ def density(lat, lon, deg):
 
 
 def corr(a, b, mask):
-    m = mask & ((a + b) > 0)
-    if m.sum() < 5:
+    """Pearson correlation over a FIXED set of cells.
+
+    An earlier version restricted the comparison to cells where a + b > 0. That
+    is not symmetric between the two uses this function is put to. The synthetic
+    field is non-zero in nearly every PAR cell, so the synthetic-versus-observed
+    correlation was scored over almost the whole hexagon, including cells with
+    no observed storms; the two halves of the record are both sparse, so the
+    bootstrap floor was scored over a much smaller and harder set. At 1 degree
+    in the super-typhoon class the two masks held 285 and 188 cells. That
+    asymmetry inflated the skill score by 0.03 to 0.14, most in the rare
+    classes. The mask is now passed in and is the same for both.
+    """
+    if mask.sum() < 5:
         return np.nan
-    return float(np.corrcoef(a[m], b[m])[0, 1])
+    if np.ptp(a[mask]) == 0 or np.ptp(b[mask]) == 0:
+        return np.nan
+    return float(np.corrcoef(a[mask], b[mask])[0, 1])
 
 
-def bootstrap_floor(df, deg, rng, n=N_BOOTSTRAP):
-    """Median self-correlation of the historical record split in half by storm."""
+def bootstrap_floor(df, deg, rng, n=N_BOOTSTRAP, mask=None):
+    """Median self-correlation of the historical record split in half by storm.
+
+    `mask` is the cell set the synthetic comparison is scored on, so the floor
+    and the score it is subtracted from are measured over the same cells.
+
+    The median is reported with the spread across replicates, because at small
+    monthly sample sizes it is not stable: for February (57 track points) the
+    100-replicate median moves by 0.06 between random seeds, against 0.008 or
+    less for every subset with more than 600 points.
+    """
     sids = df.SID.unique()
     out = []
     for _ in range(n):
         perm = rng.permutation(sids)
         a = df[df.SID.isin(perm[: len(perm) // 2])]
         b = df[df.SID.isin(perm[len(perm) // 2:])]
-        da, mask = density(a.lat, a.lon, deg)
+        da, m = density(a.lat, a.lon, deg)
         db, _ = density(b.lat, b.lon, deg)
-        out.append(corr(da, db, mask))
-    return float(np.nanmedian(out))
+        out.append(corr(da, db, mask if mask is not None else m))
+    out = np.array(out, dtype=float)
+    return float(np.nanmedian(out)), float(np.nanstd(out))
+
+
+N_SKILL_BOOT = 300
+
+
+def skill_interval(h, ds, deg, mask, rng, ss_point, n=N_SKILL_BOOT):
+    """Basic (pivotal) bootstrap interval on the skill score.
+
+    Resampling is by storm, not by track point, because points within a storm
+    are not independent. Both the numerator and the floor are recomputed inside
+    each replicate, since both carry the sampling error of the same 47-season
+    record. The interval is pivotal rather than percentile: resampling with
+    replacement thins the effective sample and pushes the replicate correlation
+    below the point estimate, so a percentile interval is biased low. The two
+    constructions agree for June to December and disagree in sign for January,
+    February and March, which is the signal that the bootstrap is not usable at
+    those sample sizes; the replicate spread is reported so that shows.
+    """
+    sids = h.SID.unique()
+    boot = []
+    for _ in range(n):
+        pick = rng.choice(sids, len(sids), replace=True)
+        hb = h[h.SID.isin(pick)]
+        dhb, _ = density(hb.lat, hb.lon, deg)
+        r = corr(dhb, ds, mask)
+        a_ = h[h.SID.isin(pick[: len(pick) // 2])]
+        b_ = h[h.SID.isin(pick[len(pick) // 2:])]
+        da, _ = density(a_.lat, a_.lon, deg)
+        db, _ = density(b_.lat, b_.lon, deg)
+        f = corr(da, db, mask)
+        if np.isfinite(r) and np.isfinite(f) and f < 0.995:
+            boot.append((r - f) / (1 - f))
+    if len(boot) < 30:
+        return np.nan, np.nan
+    q = np.percentile(boot, [2.5, 97.5])
+    return float(2 * ss_point - q[1]), float(2 * ss_point - q[0])
 
 
 def main():
@@ -108,30 +167,40 @@ def main():
     rng = np.random.default_rng(0)
     rows = []
     for deg in a.grids:
+        # The aggregate synthetic field, used as a null reference. It carries
+        # the model's overall PAR climatology and nothing about intensity class
+        # or calendar month, so a per-class or per-month score that does not
+        # beat it is not evidence of class- or month-specific fidelity. The
+        # bootstrap floor alone cannot make that distinction: the null clears it
+        # in every class and in ten to eleven of twelve months.
+        d_null, _ = density(syn.lat, syn.lon, deg)
+
+        def score(h, s, label, kind):
+            dh, mask = density(h.lat, h.lon, deg)
+            ds, _ = density(s.lat, s.lon, deg)
+            r = corr(dh, ds, mask)
+            fl, fl_sd = bootstrap_floor(h, deg, rng, mask=mask)
+            r_null = corr(dh, d_null, mask)
+            lo_, hi_ = skill_interval(h, ds, deg, mask, rng, (r - fl) / (1 - fl))
+            return dict(grid=deg, kind=kind, name=label,
+                        hist_n=len(h), syn_n=len(s), cells=int(mask.sum()),
+                        r=r, floor=fl, floor_sd=fl_sd,
+                        skill=(r - fl) / (1 - fl),
+                        r_null=r_null, skill_null=(r_null - fl) / (1 - fl),
+                        skill_lo=lo_, skill_hi=hi_)
+
         for label, lo, hi in CATEGORIES + (("All", 0, 1e9),):
             h = hist[(hist.wind >= lo) & (hist.wind < hi)]
             s = syn[(syn.wind >= lo) & (syn.wind < hi)]
             if len(h) < 50 or len(s) < 50:
                 continue
-            dh, mask = density(h.lat, h.lon, deg)
-            ds, _ = density(s.lat, s.lon, deg)
-            r = corr(dh, ds, mask)
-            fl = bootstrap_floor(h, deg, rng)
-            rows.append(dict(grid=deg, kind="category", name=label,
-                             hist_n=len(h), syn_n=len(s), r=r, floor=fl,
-                             skill=(r - fl) / (1 - fl)))
+            rows.append(score(h, s, label, "category"))
         for mi, mname in enumerate(MONTHS, start=1):
             h = hist[hist.month == mi]
             s = syn[syn.month == mi]
             if len(h) < 50 or len(s) < 50:
                 continue
-            dh, mask = density(h.lat, h.lon, deg)
-            ds, _ = density(s.lat, s.lon, deg)
-            r = corr(dh, ds, mask)
-            fl = bootstrap_floor(h, deg, rng)
-            rows.append(dict(grid=deg, kind="month", name=mname,
-                             hist_n=len(h), syn_n=len(s), r=r, floor=fl,
-                             skill=(r - fl) / (1 - fl)))
+            rows.append(score(h, s, mname, "month"))
 
     res = pd.DataFrame(rows)
     for deg in a.grids:
@@ -141,12 +210,17 @@ def main():
                 continue
             print(f"--- {kind} at {deg:g} degree grid ---")
             print(f"{'':>5} {'hist_n':>8} {'syn_n':>9} {'r':>7} {'floor':>7} "
-                  f"{'skill':>7}")
+                  f"{'skill':>7} {'null':>7} {'95% CI':>15}")
             for _, x in sub.iterrows():
                 flag = "" if x.skill > 0 else "   <-- below floor"
+                if np.isfinite(x.skill_null) and x.skill <= x.skill_null + 0.02:
+                    flag += "   <-- no better than the class/month-blind null"
                 print(f"{x['name']:>5} {x.hist_n:8d} {x.syn_n:9d} {x.r:7.3f} "
-                      f"{x.floor:7.3f} {x.skill:+7.3f}{flag}")
-            print(f"      positive skill: {(sub.skill > 0).sum()} of {len(sub)}\n")
+                      f"{x.floor:7.3f} {x.skill:+7.3f} {x.skill_null:+7.3f} "
+                      f"[{x.skill_lo:+.2f},{x.skill_hi:+.2f}]{flag}")
+            print(f"      positive skill: {(sub.skill > 0).sum()} of {len(sub)}; "
+                  f"beating the null: {(sub.skill > sub.skill_null + 0.02).sum()} "
+                  f"of {len(sub)}\n")
 
     path = a.out or os.path.join(a.run, "spatial_validation.csv")
     res.to_csv(path, index=False)

@@ -26,13 +26,23 @@ import torch
 import torch.nn as nn
 
 import terrain
+import windconv
 from data import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN, TROPICAL_NATURES
 
 LOG_2PI = float(np.log(2.0 * np.pi))
 
 # Zerrudo and Servando (R1): V(t) = V0[1 - a(V0 t + hbar)], a fitted by symbolic
 # regression on 453 overland points with storm-stratified five-fold CV.
+#
+# Their dataset is the JTWC 1-MINUTE sustained wind (their Section 2a: "1-min
+# sustained wind from JTWC"; their Fig. 3 caption). This model carries the RSMC
+# Tokyo 10-minute wind, so the equation is evaluated in the convention it was
+# fitted in and the result converted back. Because the wind-time term is
+# quadratic in V0, using the 10-minute wind directly understates the decay by
+# 15-16% in the violent-typhoon band, about 1.6 kt per six-hourly step at
+# V >= 100 kt. Set DECAY_CONVENTION_1MIN = False to reproduce that behaviour.
 DECAY_A = 1.43e-4
+DECAY_CONVENTION_1MIN = True
 WIND_QUANTUM = 5.0        # JMA reports TS and above in 5 kt steps
 
 # Zerrudo et al., Eq. 4: every TOK_GRADE = 2 (tropical depression) record in
@@ -53,7 +63,7 @@ FEATURES = [
 ]
 
 # Rapid intensification is a multi-step regime, not a lucky single draw. The
-# diagnostic showed SYNTC-AI producing STY-class RI at 26.7% against 45.2%
+# diagnostic showed SYNTC-AI producing STY-class RI well below the 46.8%
 # observed, with the whole upper half of the peak-intensity distribution
 # compressed downward: storms stall at 80-100 kt instead of punching through.
 #
@@ -77,13 +87,26 @@ RI_LOOKBACK_STEPS = 4        # 24 h at the 6-hourly synoptic cadence
 # feature or a tuned constant; it corrects which errors the fit is allowed to
 # tolerate. Weights are normalised to mean 1 so the learning rate is unchanged.
 WEIGHT_BANDS = (0, 34, 48, 64, 100, 1e9)
-# 0.25 chosen against two published targets over 600 simulated years per
-# candidate: the 100-year PAR return level and the observed rapid-
-# intensification rates. At 1.0 (full inverse frequency, a 7.2x multiplier on
-# super-typhoon transitions) the model treats violent intensification as seven
-# times more common than it is and produces 177 kt over Philippine land. At 0.0
-# it under-produces super typhoons badly. 0.25 gives a 1.7x multiplier.
-WEIGHT_POWER = 0.25
+# Recalibrated to 0.40. The original 0.25 was chosen when the terrain decay was
+# weighted by the footprint land fraction, which brakes inland decay by about
+# 0.9 kt per step and 2.4 kt per step above 100 kt; a larger exponent then
+# produced unphysical overland winds, up to 177 kt at 1.0. With the weight
+# removed the inland decay is stronger and that headroom can be spent on
+# attainment instead. Measured over 500 storm-years per candidate, no land
+# fraction, 1-minute decay convention, ceiling from the raw winds:
+#
+#   exponent   storms/yr >=100 kt   RI among TY   100-yr return level   overland
+#     0.25            1.11              23.1%      123.20 kt            116.2 med
+#     0.40            1.38              25.2%      123.92 kt            108.8 med
+#   observed          2.64              26.5%      126.43 kt            112 bench
+#
+# 0.40 moves attainment and rapid intensification toward the record without
+# costing the return level, whose intervals overlap the observed one either way,
+# and without raising the overland maximum. Attainment remains about half the
+# observed rate; that is the limitation the paper reports rather than a target
+# this exponent can reach. At 1.0 the model still produces unphysical overland
+# winds, so this is a recalibration within the same trade, not its removal.
+WEIGHT_POWER = 0.40
 
 
 def band_weights(vmax, bands=WEIGHT_BANDS, power=None):
@@ -107,13 +130,17 @@ def band_weights(vmax, bands=WEIGHT_BANDS, power=None):
 # network infers it from a handful of extreme events. k controls how abruptly
 # the brake engages; larger k lets storms run closer to MPI before slowing.
 #
-# k = 6 is the ONLY number in SYNTC-AI calibrated against anything other than
-# the track record itself. It was chosen so the 100-year PAR return level lands
+# k = 6 is one of two numbers in SYNTC-AI calibrated against something other
+# than the track record itself; WEIGHT_POWER above is the other, and both are
+# declared as such in the manuscript. k was chosen so the 100-year PAR return level lands
 # inside the published extreme-value interval (126.0 +/- 3.3 kt, Weibull on 47
 # annual maxima). Calibration used 600 simulated years per candidate, because a
 # 100-year return level estimated from a single simulated century carries 5 to
 # 11 kt of sampling noise and tuning against one century fits that noise.
 SATURATION_K = 6.0
+
+# See PotentialIntensity.fit.
+CEILING_FROM_RAW_WIND = True
 
 
 # Warming response of the thermodynamic ceiling.
@@ -195,7 +222,16 @@ class PotentialIntensity:
     def fit(self, frame):
         iy, ix = self._idx(frame["lat"].to_numpy(), frame["lon"].to_numpy())
         month = frame["time"].dt.month.to_numpy()
-        v = frame["vmax"].to_numpy()
+        # The ceiling is a physical bound and should come from the record as
+        # recorded. Dequantisation exists to stop the networks learning the 5 kt
+        # reporting grid; feeding it to the ceiling instead hands every cell
+        # +/- 2.5 kt of reporting noise and tops the table out at 142.19 kt
+        # against an observed basin maximum of 140. Reading the raw wind lowers
+        # all 509 cells by a mean of 1.15 kt and removes the storms that were
+        # piling up on that artefact.
+        col = ("vmax_raw" if CEILING_FROM_RAW_WIND and "vmax_raw" in frame
+               else "vmax")
+        v = frame[col].to_numpy()
         self.global_max = float(np.max(v))
 
         raw = {}
@@ -240,6 +276,9 @@ def get_potential_intensity():
     return _MPI
 
 
+USE_LAND_FRACTION = False
+
+
 def physics_dv(vmax, hbar, over_land, step_hours=6.0, a=DECAY_A,
                land_frac=None):
     """Wind change over one step from the published terrain-decay equation.
@@ -250,27 +289,34 @@ def physics_dv(vmax, hbar, over_land, step_hours=6.0, a=DECAY_A,
     split: that equation was fitted on 453 overland points with cross-validation
     and is better evidence than anything learnable from this sample.
 
-    Coastal approach. The published equation is applied at points whose centre
-    is over land. But only 1.2% of WNP track points are centre-over-land while
-    8.8% have terrain inside the 75 km footprint. That 7.6% is the approach,
-    where mountains already sit under the circulation and the storm is losing
-    energy to them. Gating on the coastline gives those points zero decay, so a
-    storm can reach the coast at full strength and only then start weakening,
-    which is how synthetic winds over Philippine land ended up 11 kt above the
-    observed record.
+    Coastal approach. Decay engages before the centre reaches the coast without
+    any modification to the relation, because hbar is a footprint mean with sea
+    counted as zero elevation and the hbar term is not gated by the land test.
+    At the 367 approach points in the record with the centre offshore and more
+    than a fifth of the footprint over land, the unmodified relation already
+    removes 0.618 kt per six-hourly step.
 
-    So the binary land test becomes the footprint land fraction f. The
-    accumulated-exposure term scales with f; hbar is already footprint-weighted
-    with sea counted as zero elevation. The limits are the published equation
-    unchanged: f = 1 fully inland, f = 0 open ocean.
+    An earlier version weighted the wind-time term by the footprint land
+    fraction f, on the grounds that a centre-only test gives those points zero
+    decay. It does not: the weight roughly doubles the approach decay rather
+    than creating it, and it simultaneously brakes decay inland, where the
+    median land fraction under a centre-over-land point is 0.534. Over the
+    record that costs 0.945 kt per step at centre-over-land points and 2.370 kt
+    per step above 100 kt, in the direction that leaves synthetic storms too
+    strong over the archipelago. USE_LAND_FRACTION = True restores it.
     """
     v = np.asarray(vmax, dtype=float)
     h = np.asarray(hbar, dtype=float)
-    if land_frac is None:
+    if land_frac is None or not USE_LAND_FRACTION:
         f = (np.asarray(over_land, dtype=float) > 0.5).astype(float)
     else:
         f = np.clip(np.asarray(land_frac, dtype=float), 0.0, 1.0)
-    return -a * v * (v * step_hours * f + h)
+    if not DECAY_CONVENTION_1MIN:
+        return -a * v * (v * step_hours * f + h)
+    # Evaluate in the convention a was fitted in, then convert back.
+    v1 = windconv.to_1min(v)
+    v1_next = np.maximum(v1 * (1.0 - a * (v1 * step_hours * f + h)), 0.0)
+    return windconv.to_10min(v1_next) - v
 
 
 # --------------------------------------------------------------------------
