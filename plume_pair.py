@@ -26,7 +26,7 @@ _ap.add_argument("--left-label",  default="(a)  13\u00b0N, 132\u00b0E, October, 
 _ap.add_argument("--right-label", default="(b)  10\u00b0N, 140\u00b0E, November, outside PAR")
 _ap.add_argument("--left-pt",  nargs=2, type=float, default=[13.0, 132.0], metavar=("LAT","LON"))
 _ap.add_argument("--right-pt", nargs=2, type=float, default=[10.0, 140.0], metavar=("LAT","LON"))
-_ap.add_argument("--keep", type=int, default=40, help="realisations drawn per panel")
+_ap.add_argument("--keep", type=int, default=15, help="realisations drawn per panel")
 _ap.add_argument("--out", default="genesis_plume_pair")
 A = _ap.parse_args()
 NKEEP = A.keep

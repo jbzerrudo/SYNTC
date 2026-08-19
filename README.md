@@ -6,8 +6,8 @@ A synthetic tropical cyclone generator for the Philippine Area of Responsibility
 and the analysis code for every figure and table in
 
 > Zerrudo, J.B., Abdon, S.J., Arruejo, S.J., David, S., Aggasid, V.G.
-> *SynTC: Learning Tropical Cyclone Tracks and Intensity in the Philippine
-> Area of Responsibility.*
+> *Philippine Tropical Cyclone Extreme-Value Analysis and Intensity Hotspots
+> from Historical Data and Synthetic Storm Modeling.*
 > Submitted to Tropical Cyclone Research and Review.
 
 Track propagation and intensity evolution are learned as conditional densities
@@ -56,25 +56,57 @@ plotting variants the figures were checked against. Nothing else is included.
 | `replot_plume.py` | redraws the plume on a PAR-focused window, from the CSVs the tool already wrote |
 | `make_table_return_periods.py` | Table 2, as LaTeX, straight from the CSV |
 | `make_table_spatial.py` | Table 3, as LaTeX, straight from the CSV |
+| `make_new_figs.py` | the annual-maximum comparison and the saturation-exponent sensitivity |
+| `make_island_fig.py` | landfall share by island group, and the observed trend |
+| `plume_pair.py` | the two-panel genesis plume, see below |
 | `to_arcgis.py` | reshapes a run for the ArcGIS scripts below |
 | `arcgis_csv2pts2segments.py`, `arcgis_hotspot_batch_final.py` | the ArcGIS side, used for the return-period track maps |
 
 ### The genesis plume
 
 `genesis_forecast.py` writes two files per query, a per-cell passage field and
-every simulated track. The pair for 13°N, 132°E in October is committed here,
-`genesis_13N_132E_m10_passage.csv` and `genesis_13N_132E_m10_tracks.csv`, so
-`replot_plume.py` runs without re-simulating anything:
+every simulated track:
 
 ```
-python replot_plume.py --run . --dtm dtm_phil_1km.tif --style field
+python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
+       --lat 13 --lon 132 --month 10 --n 2000 --out gen07
+python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
+       --lat 10 --lon 140 --month 11 --n 2000 --out gen07
 ```
 
-`--style field` draws the probability field with a north arrow and a degree
-graticule, clipped to 112–140°E and 2–28°N. `--style spaghetti` drops the
-field and draws the individual tracks instead. The window holds 48.7% of the
-passage probability; the remainder lies northeast of it, where storms recurve
-out of PAR.
+`plume_pair.py` draws the paper's two-panel figure from those CSVs without
+re-simulating anything:
+
+```
+python plume_pair.py --gen gen07 --dtm dtm_phil_1km.tif --keep 15
+```
+
+**Choosing `--keep`.** The colour field is the full 2,000 realisations. The
+tracks drawn on top are the N that follow the high-probability corridor most
+closely, ranked by the 10th percentile of passage probability along the track.
+The first 24 h are dropped from that ranking because every realisation starts in
+the genesis cell, where the probability is 1 by construction, and a track that
+dissipates early would otherwise outrank one that runs the corridor end to end.
+A low quantile rather than a mean is used so that a realisation cannot recurve
+out of the corridor and still rank well on the leg it spent inside.
+
+| `--keep` | how it reads |
+|---|---|
+| 5 | too sparse; five lines do not establish a corridor, and the November panel looks like noise |
+| 10 | corridor is legible in the October panel, still thin through the Visayas in the November one |
+| **15** | **the figure in the paper.** Both panels read as a corridor and individual tracks are still followable |
+| 20 | fine, slightly denser |
+| 25 and above | tracks begin to obscure the field they are drawn on |
+
+Other options: `--left` and `--right` select which genesis pair goes in which
+panel, `--left-pt`/`--right-pt` set the marker coordinates, `--left-label`/
+`--right-label` set the panel headings, and `--out` sets the output stem. The
+window is 112–145°E and 2–28°N and holds 49.5% of the October case's passage
+probability; the remainder lies northeast of it, where storms recurve out of PAR.
+
+`replot_plume.py` still draws the older single-panel version, `--style field`
+for the probability field and `--style spaghetti` for tracks alone.
+
 
 ## Reproducing the paper
 
@@ -84,17 +116,22 @@ difference between them is attributable to that trend alone.
 
 ```
 python syntc_ai.py --ibtracs IBTrACS.WP.list.v04r01.points.csv \
-                   --dtm dtm_phil_1km.tif --out run03 \
+                   --dtm dtm_phil_1km.tif --out run07 \
                    --ensembles 20 --years 100 --mpi-trend 0.0
-python syntc_ai.py --ibtracs ... --dtm ... --out run04 \
+python syntc_ai.py --ibtracs ... --dtm ... --out run08 \
                    --ensembles 20 --years 100 --mpi-trend 4.0
 ```
 
-`run_both.bat` runs the pair on Windows. Then, for each run:
+`run_both_07.bat` runs the pair on Windows. Then, for each run:
 
 ```
-make_figures.bat run03
+make_figures.bat run07
 ```
+
+`REGENERATE_FIGURES.bat` rebuilds every figure in the paper in one pass, from the
+spatial validation through to the plume. It expects the saturation-exponent scout
+in `scout_k_data/scoutk_06` .. `scoutk_12`; without it every figure but
+`fig_saturation_tradeoff` is still produced.
 
 which runs the acceptance test first and stops if it fails, then
 `validate_hotspots.py` (whose output supplies the *r* and skill printed on the
@@ -155,19 +192,30 @@ shipping a frozen copy invites someone to analyse a stale archive:
   https://www.ncei.noaa.gov/products/international-best-track-archive
 
 Intensity is the RSMC Tokyo 10-minute sustained wind (`TOK_WIND`), consistent
-with the PAGASA operational convention. Seasons through 2009 are used for
+with the PAGASA operational convention. The transition densities are fitted to
+dequantised winds, which is correct for a density; the potential-intensity
+ceiling is built from the raw reported winds, because dequantising an extremum
+lifts it above anything on record. The ceiling therefore tops out at the basin
+record of 140 kt. Seasons through 2009 are used for
 fitting, 2010–2014 for early stopping, and 2015–2023 are held out entirely.
 
 ## Known limitations
 
-Quantified in the paper rather than asserted. The intensity tail is thin: 2.4%
-of synthetic PAR track points reach super typhoon against 6.2% observed. No
-extratropical transition is modelled, so 36.4% of synthetic track points lie
-north of 25°N against 14.7% observed, and recurved storms stay alive too long.
-The potential-intensity ceiling is built on dequantised observed winds and so
-tops out at 142.19 kt against a basin record of 140. Terrain is resolved only
-inside the Philippine digital terrain model; storms crossing Taiwan and other
-land receive a default elevation.
+Quantified in the paper rather than asserted. The intensity tail is thin: 2.5%
+of synthetic PAR track points reach super typhoon against 6.2% observed, and
+8.3% of storms peak at super typhoon strength inside PAR against 16.3% observed,
+so attainment runs at about half the observed rate. No extratropical transition
+is modelled, so 36.1% of synthetic track points lie north of 25°N against 14.7%
+observed, and recurved storms stay alive too long. The overland extreme is
+overstated: four of twenty ensembles exceed the 95th percentile of a matched
+100-season benchmark where one is expected (binomial p = 0.016), so
+`check_run.py` fails on that criterion by design rather than being tuned to
+pass. Terrain is resolved only inside the Philippine digital terrain model, which
+spans 4.5-21.2°N and 116.9-127.3°E. A storm outside that raster is treated as
+being over open ocean: mean elevation is zero and the over-land flag is false, so
+the decay relation is never evaluated and the storm crosses unweakened. Taiwan
+Island and Sabah are the two landmasses this affects inside PAR, carrying 1.1% and
+0.1% of synthetic PAR track points. Philippine landfall statistics are unaffected.
 
 ## Licence and citation
 
