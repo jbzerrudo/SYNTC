@@ -15,10 +15,10 @@ import shutil
 # 1. CONFIGURATION
 # ==========================================
 # --- INPUT ---
-INPUT_CSV = r"D:\2026\SYNTC\SYNTC-main\outputs\ENSEMBLE\ensemble_member_1_20260517_090942\synthetic_storms_2026_2125.csv"
+INPUT_CSV = r"D:\2026\SYNTC\SYNTC-AI\run07\synthetic_storms_ens09.csv"
 
 # --- OUTPUT ---
-OUTPUT_MAIN_FOLDER = r"D:\2026\SYNTC\arcmap\tracks4"
+OUTPUT_MAIN_FOLDER = r"D:\2026\SYNTC\SYNTC-AI\arcmap\ens09"
 
 OUTPUT_POINTS_GDB = os.path.join(OUTPUT_MAIN_FOLDER, "StormPoints.gdb")
 OUTPUT_POINTS_FC = os.path.join(OUTPUT_POINTS_GDB, "all_points_combined")

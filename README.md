@@ -54,13 +54,16 @@ plotting variants the figures were checked against. Nothing else is included.
 | `plot_tracks.py` | the seasonal migration of the track corridor |
 | `genesis_forecast.py` | the tool: probability of passage from one genesis point |
 | `replot_plume.py` | redraws the plume on a PAR-focused window, from the CSVs the tool already wrote |
-| `make_table_return_periods.py` | Table 2, as LaTeX, straight from the CSV |
-| `make_table_spatial.py` | Table 3, as LaTeX, straight from the CSV |
+| `make_table_return_periods.py` | Table 1, as LaTeX, straight from the CSV |
+| `make_table_spatial.py` | Table 2, as LaTeX, straight from the CSV |
 | `make_new_figs.py` | the annual-maximum comparison and the saturation-exponent sensitivity |
 | `make_island_fig.py` | landfall share by island group, and the observed trend |
 | `plume_pair.py` | the two-panel genesis plume, see below |
 | `to_arcgis.py` | reshapes a run for the ArcGIS scripts below |
 | `arcgis_csv2pts2segments.py`, `arcgis_hotspot_batch_final.py` | the ArcGIS side, used for the return-period track maps |
+| `betaparams_check_finall.py` | beta fits per intensity class, the imputation basis for Figure 2 |
+| `genesis_trend_analysis.py` | TOK_GRADE wind recovery and genesis trend test |
+| `SORTMAXWIND.py`, `ExtremeValCalcBootStrapper_v3.py` | annual-maximum extraction and bootstrap EVA behind Table 1 |
 
 ### The genesis plume
 
@@ -141,17 +144,23 @@ hotspot panels), then every plotting script in order.
 
 | paper figure | command |
 |---|---|
-| 3 intensity distribution | `python plot_results.py --run run03 --ibtracs IB --dtm DTM --grid 1` |
-| 4 spatial skill | `python validate_hotspots.py --run run03 --ibtracs IB --dtm DTM` then as above |
-| 5 return-period tracks | `python to_arcgis.py --run run03`, then the ArcGIS scripts |
-| 6 return levels | `python plot_return_levels.py --ibtracs IB --dtm DTM --run run03 --compare` |
-| 7 hotspots by class | `plot_results.py`, as figure 3 |
-| 8 seasonality | `python plot_seasonality.py --run run03 --ibtracs IB --dtm DTM` |
-| 9 seasonal shift | `python plot_tracks.py --run run03 --ibtracs IB --dtm DTM` |
-| 10 genesis plume | `python genesis_forecast.py --model run03/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 2000`, then `python replot_plume.py --run . --dtm DTM --style field` for the PAR-focused version |
-| 11 filtering effect | `python plot_filtering.py --run run03 --ibtracs IB --dtm DTM` |
-| 12 hotspots by month | `plot_results.py`, as figure 3 |
-| Table 2 | `python make_table_return_periods.py --run run03 > tab_return_periods.tex` |
+| 1 area of interest | ArcGIS, not scripted |
+| 2 wind imputation | `python betaparams_check_finall.py` |
+| 3 intensity distribution | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
+| 4 spatial skill | `python validate_hotspots.py --run run07 --ibtracs IB --dtm DTM` then as above |
+| 5 annual maxima | `python make_new_figs.py --run run07 --ibtracs IB --dtm DTM` |
+| 6 return-period tracks | `python to_arcgis.py --run run07`, then `arcgis_csv2pts2segments.py` |
+| 7 return levels | `python plot_return_levels.py --ibtracs IB --dtm DTM --run run07 --compare` |
+| 8 hotspots by class | `arcgis_hotspot_batch_final.py` |
+| 9 seasonality | `python plot_seasonality.py --run run07 --ibtracs IB --dtm DTM` |
+| 10 island landfall | `python make_island_fig.py --run run07 --ibtracs IB --dtm DTM` |
+| 11 seasonal shift | `python plot_tracks.py --run run07 --ibtracs IB --dtm DTM` |
+| 12 genesis plume | `python genesis_forecast.py --model run07/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 2000`, then `python plume_pair.py --keep 15` |
+| 13 filtering effect | `python plot_filtering.py --run run07 --ibtracs IB --dtm DTM` |
+| 14 hotspots by month | `arcgis_hotspot_batch_final.py` |
+| 15 saturation tradeoff | `python make_new_figs.py --scout scout_k_data` |
+| Table 1 | `python make_table_return_periods.py --run run07 > tab_return_periods.tex` |
+| Table 2 | `python make_table_spatial.py --run run07 > tab_spatial.tex` |
 
 Figure titles are **off** by default, because a journal figure carries its
 caption in LaTeX and burning the same words into the image duplicates them. Pass
@@ -164,7 +173,7 @@ re-queries it without refitting anything, so a forecast and the paper's
 catalogue provably come from the same fit:
 
 ```
-python genesis_forecast.py --model run03/model.pkl --dtm dtm_phil_1km.tif \
+python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
        --lat 13 --lon 132 --month 10 --n 2000
 ```
 
