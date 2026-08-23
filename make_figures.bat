@@ -65,9 +65,9 @@ echo === the tool: genesis-conditioned forecasts =========================
 REM Three genesis points chosen to span the regimes the paper discusses:
 REM a Philippine Sea October storm, an early-season low-latitude storm, and
 REM a late-season South China Sea storm.
-python -u genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 13 --lon 132 --month 10 --n 2000 --out "%RUN%"
-python -u genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 9  --lon 137 --month 7  --n 2000 --out "%RUN%"
-python -u genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 16 --lon 127 --month 11 --n 2000 --out "%RUN%"
+python -u genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 13 --lon 132 --month 10 --n 10000 --out "%RUN%"
+python -u genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 9  --lon 137 --month 7  --n 10000 --out "%RUN%"
+python -u genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 16 --lon 127 --month 11 --n 10000 --out "%RUN%"
 
 echo.
 echo === done ============================================================

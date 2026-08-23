@@ -4,3 +4,15 @@ run0*/
 ENSEMBLE/
 *.pkl
 *.log
+
+# Generated catalogues and plume output. Large, and fully reproducible from
+# REGENERATE_FIGURES.bat, so they belong in the Zenodo deposit rather than in
+# git. gen07 alone is about 170 MB at n=10,000.
+gen*/
+forecast/
+*_tracks.csv
+*_passage.csv
+
+# Exploratory runs off the run09 model. Not part of the submitted paper.
+plume_pair_aug_oct.pdf
+plume_pair_aug_oct.png

@@ -34,12 +34,17 @@ python make_new_figs.py --ibtracs "%IB%" --run "%RUN%" --dtm "%DTM%" --scout sco
 echo [3b/6] landfall by island group
 python make_island_fig.py --ibtracs "%IB%" --run "%RUN%" --dtm "%DTM%" --out fig_island_landfall
 
-echo [4/6] genesis plume, both cases  (about 4 minutes each)
-python genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 13 --lon 132 --month 10 --n 2000 --out gen07
-python genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 10 --lon 140 --month 11 --n 2000 --out gen07
+echo [4/6] genesis plume, all four cases  (about 20 minutes each at n=10000)
+REM The first two feed the two-panel figure. The second two are text only:
+REM they supply the July and November cases quoted in Section 4, so that
+REM every number in that section comes out of this script.
+python genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 13 --lon 132 --month 10 --n 10000 --out gen07
+python genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 10 --lon 140 --month 11 --n 10000 --out gen07
+python genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 9  --lon 137 --month 7  --n 10000 --out gen07
+python genesis_forecast.py --model "%RUN%\model.pkl" --dtm "%DTM%" --lat 16 --lon 127 --month 11 --n 10000 --out gen07
 
 echo [5/6] two-panel plume
-python plume_pair.py --gen gen07 --dtm "%DTM%" --keep 40 --out genesis_plume_pair
+python plume_pair.py --gen gen07 --dtm "%DTM%" --keep 30 --out genesis_plume_pair
 
 echo [6/6] copying the PDFs the manuscript includes into %OUT%
 for %%F in (intensity_distribution hotspots_by_category hotspots_by_month skill_summary ^

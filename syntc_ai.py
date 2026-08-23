@@ -166,6 +166,7 @@ class Config:
     # land point is 0.534, by about 0.9 kt per step and by 2.4 kt per step above
     # 100 kt. See intensity.physics_dv.
     decay_land_fraction: bool = False
+    track_memory_order: int = 1   # 1 reproduces run07
     terrain_footprint_km: float = 75.0
     p_env_hpa: float = 1010.0
     # Set to a number (e.g. 106.0) to force the overland ceiling. Leaving it
@@ -375,6 +376,7 @@ class SyntcAI:
 
         if verbose:
             print("loading IBTrACS ...")
+        D.set_memory_order(getattr(cfg, 'track_memory_order', 1))
         track_pts = D.load_tracks(cfg.ibtracs, cfg.season_min, cfg.season_max,
                                   synoptic_only=True)
         track_tr = D.build_transitions(track_pts, step_hours=cfg.step_hours)
@@ -451,6 +453,10 @@ class SyntcAI:
         months = np.asarray(months)
         alive = np.ones(n, dtype=bool)
         u = np.zeros(n); v = np.zeros(n); dv_prev = np.zeros(n)
+        # Lag state, mirroring data.build_transitions: at each step u2/u3 hold
+        # the u_prev of one and two steps earlier, and h2/h3 mark availability.
+        u2 = np.zeros(n); v2 = np.zeros(n); h2 = np.zeros(n)
+        u3 = np.zeros(n); v3 = np.zeros(n); h3 = np.zeros(n)
         crossed = np.zeros(n, dtype=bool)
         seen_par = np.zeros(n, dtype=bool)
         sid = np.asarray(sid)
@@ -485,6 +491,8 @@ class SyntcAI:
                          if getattr(cfg, "track_wind_1min", False) else wind[idx]),
                 "month_sin": msin, "month_cos": mcos, "age_h": age,
                 "is_genesis": 1.0 if step == 0 else 0.0,
+                "u_prev2": u2[idx], "v_prev2": v2[idx], "has_prev2": h2[idx],
+                "u_prev3": u3[idx], "v_prev3": v3[idx], "has_prev3": h3[idx],
             })[D.FEATURES]
             d = self.track.sample(tf, rng=rng, generator=gen)
 
@@ -508,6 +516,9 @@ class SyntcAI:
 
             lon[idx] = lon[idx] + d[:, 0]
             lat[idx] = lat[idx] + d[:, 1]
+            # Shift the lag state before overwriting u, v: order matters.
+            u3[idx], v3[idx], h3[idx] = u2[idx], v2[idx], h2[idx]
+            u2[idx], v2[idx], h2[idx] = u[idx], v[idx], 1.0
             u[idx], v[idx] = d[:, 0], d[:, 1]
             wind[idx] = np.maximum(0.0, wind[idx] + dv)
             dv_prev[idx] = dv
@@ -783,6 +794,9 @@ def load_model(path, strict=False):
     m = payload["model"]
     m.genesis.kde = {mo: gaussian_kde(data, bw_method=f)
                      for mo, (data, f) in payload["genesis_kde"].items()}
+    # The network's input width is fixed at fitting time, so the feature list
+    # has to be restored to what it was then, not to the module default.
+    D.set_memory_order(getattr(m.cfg, "track_memory_order", 1))
     return m
 
 
@@ -796,6 +810,10 @@ def main():
     ap.add_argument("--counts-csv", default=None,
                     help="CSV with year and storm-count columns from your "
                          "SARIMAX projection")
+    ap.add_argument("--memory-order", type=int, default=None,
+                    help="past displacement steps the track propagator sees. "
+                         "1 is the published configuration and reproduces "
+                         "run07; 3 is the measured optimum.")
     ap.add_argument("--mpi-trend", type=float, default=None,
                     help="percent increase in maximum potential intensity per "
                          "century (default 4.0, the low end of Knutson et al. "
@@ -822,6 +840,8 @@ def main():
     cfg.counts_mode = a.counts_mode
     if a.mpi_trend is not None:
         cfg.mpi_trend_percent_per_century = a.mpi_trend
+    if a.memory_order is not None:
+        cfg.track_memory_order = int(a.memory_order)
     cfg.overland_cap_kt = a.cap_overland
 
     os.makedirs(a.out, exist_ok=True)

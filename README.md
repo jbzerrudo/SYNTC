@@ -68,23 +68,25 @@ plotting variants the figures were checked against. Nothing else is included.
 ### The genesis plume
 
 `genesis_forecast.py` writes two files per query, a per-cell passage field and
-every simulated track:
+every simulated track. It needs `run07/model.pkl`, which the catalogue step
+under *Reproducing the paper* produces; neither the fitted model nor the run
+folders are tracked by git, see `.gitignore`.
 
 ```
 python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
-       --lat 13 --lon 132 --month 10 --n 2000 --out gen07
+       --lat 13 --lon 132 --month 10 --n 10000 --out gen07
 python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
-       --lat 10 --lon 140 --month 11 --n 2000 --out gen07
+       --lat 10 --lon 140 --month 11 --n 10000 --out gen07
 ```
 
 `plume_pair.py` draws the paper's two-panel figure from those CSVs without
 re-simulating anything:
 
 ```
-python plume_pair.py --gen gen07 --dtm dtm_phil_1km.tif --keep 15
+python plume_pair.py --gen gen07 --dtm dtm_phil_1km.tif --keep 30
 ```
 
-**Choosing `--keep`.** The colour field is the full 2,000 realisations. The
+**Choosing `--keep`.** The colour field is the full 10,000 realisations. The
 tracks drawn on top are the N that follow the high-probability corridor most
 closely, ranked by the 10th percentile of passage probability along the track.
 The first 24 h are dropped from that ranking because every realisation starts in
@@ -145,26 +147,71 @@ hotspot panels), then every plotting script in order.
 | paper figure | command |
 |---|---|
 | 1 area of interest | ArcGIS, not scripted |
-| 2 wind imputation | `python betaparams_check_finall.py` |
-| 3 intensity distribution | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
-| 4 spatial skill | `python validate_hotspots.py --run run07 --ibtracs IB --dtm DTM` then as above |
-| 5 annual maxima | `python make_new_figs.py --run run07 --ibtracs IB --dtm DTM` |
-| 6 return-period tracks | `python to_arcgis.py --run run07`, then `arcgis_csv2pts2segments.py` |
-| 7 return levels | `python plot_return_levels.py --ibtracs IB --dtm DTM --run run07 --compare` |
-| 8 hotspots by class | `arcgis_hotspot_batch_final.py` |
-| 9 seasonality | `python plot_seasonality.py --run run07 --ibtracs IB --dtm DTM` |
-| 10 island landfall | `python make_island_fig.py --run run07 --ibtracs IB --dtm DTM` |
-| 11 seasonal shift | `python plot_tracks.py --run run07 --ibtracs IB --dtm DTM` |
-| 12 genesis plume | `python genesis_forecast.py --model run07/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 2000`, then `python plume_pair.py --keep 15` |
-| 13 filtering effect | `python plot_filtering.py --run run07 --ibtracs IB --dtm DTM` |
-| 14 hotspots by month | `arcgis_hotspot_batch_final.py` |
-| 15 saturation tradeoff | `python make_new_figs.py --scout scout_k_data` |
+| 2 pipeline schematic | drawio, not scripted |
+| 3 wind imputation | `python betaparams_check_finall.py` |
+| 4 intensity distribution | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
+| 5 spatial skill | `python validate_hotspots.py --run run07 --ibtracs IB --dtm DTM` then as above |
+| 6 annual maxima | `python make_new_figs.py --run run07 --ibtracs IB --dtm DTM` |
+| 7 return-period tracks | `python to_arcgis.py --run run07`, then `arcgis_csv2pts2segments.py` |
+| 8 return levels | `python plot_return_levels.py --ibtracs IB --dtm DTM --run run07 --compare` |
+| 9 hotspots by class | `arcgis_hotspot_batch_final.py` |
+| 10 seasonality | `python plot_seasonality.py --run run07 --ibtracs IB --dtm DTM` |
+| 11 island landfall | `python make_island_fig.py --run run07 --ibtracs IB --dtm DTM` |
+| 12 seasonal shift | `python plot_tracks.py --run run07 --ibtracs IB --dtm DTM` |
+| 13 genesis plume | `python genesis_forecast.py --model run07/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 10000`, then `python plume_pair.py --keep 30` |
+| 14 filtering effect | `python plot_filtering.py --run run07 --ibtracs IB --dtm DTM` |
+| 15 hotspots by month | `arcgis_hotspot_batch_final.py` |
+| 16 saturation tradeoff | `python make_new_figs.py --scout scout_k_data` |
 | Table 1 | `python make_table_return_periods.py --run run07 > tab_return_periods.tex` |
 | Table 2 | `python make_table_spatial.py --run run07 > tab_spatial.tex` |
 
 Figure titles are **off** by default, because a journal figure carries its
 caption in LaTeX and burning the same words into the image duplicates them. Pass
 `--titles` to any plotting script when browsing a run folder.
+
+## Model configurations: what the paper used, and what came after
+
+Two configurations exist in this repository. They differ in exactly one
+parameter and are kept separate on purpose.
+
+| | `run07` / `run08` | `run09` / `run10` |
+|---|---|---|
+| track memory | 1 past displacement step | 3 past displacement steps |
+| built by | `run_both_07.bat` | `run_both_09.bat` |
+| status | **the published configuration** | later work, not in the paper |
+
+**Everything reported in the manuscript comes from `run07`**, the stationary
+control, with `run08` as its warming twin. Every number, table and figure in the
+paper is reproducible from that pair alone, and `REGENERATE_FIGURES.bat` is
+pointed at it. Do not mix `run09` output into a comparison with published
+values.
+
+`run09` extends the track propagator's memory from one past displacement to
+three, leaving the mixture output, the intensity model, the terrain decay and
+the validation framework untouched. Fitted on the same 30,997 transitions with
+the same seed and scored on the same held-out 5,910 transitions of 2015--2023,
+it raises the mean log likelihood by 0.044, with a bootstrap 95% interval of
+0.032 to 0.056. That gain survives controls against a wider network at memory 1
+and against six random noise features, so it comes from the lag information
+rather than from added parameters.
+
+What it does not change is the archipelago filtering result: median loss for
+storms crossing at 100 kt or more is 24% under `run07` and 23% under `run09`,
+every such crosser emerges below threshold in both, and the aggregate spatial
+skill is the same to two decimals. What it does change is delivery frequency,
+since straighter tracks bring more storms to the coast: land crossings rise
+from 4.83 to 5.06 per season and intense landfalls from 10.7 to 13.8 per 100
+seasons. Both sit inside the sampling range of the five such storms the
+47-season record contains, so the record cannot separate the two
+configurations on that quantity.
+
+`data.py` and `syntc_ai.py` support both. `track_memory_order` defaults to 1,
+so the published behaviour is what you get unless `--memory-order` is passed.
+
+```
+python syntc_ai.py --ibtracs IB --dtm DTM --out run09 \
+                   --ensembles 20 --years 100 --mpi-trend 0.0 --memory-order 3
+```
 
 ## Using the fitted model on its own
 
@@ -174,7 +221,7 @@ catalogue provably come from the same fit:
 
 ```
 python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
-       --lat 13 --lon 132 --month 10 --n 2000
+       --lat 13 --lon 132 --month 10 --n 10000
 ```
 
 It reports the chance of entering PAR, of a Philippine landfall and where, the

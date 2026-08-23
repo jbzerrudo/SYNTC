@@ -37,6 +37,23 @@ FEATURES = [
 ]
 TARGETS = ["dlon", "dlat"]
 
+# How many past displacement steps the track propagator may see. 1 is the
+# published configuration and reproduces run07 exactly; set_memory_order(k)
+# appends 3(k-1) further features. Held in a module constant rather than
+# passed around because models.py imports FEATURES by reference.
+TRACK_MEMORY_ORDER = 1
+_BASE_FEATURES = list(FEATURES)
+
+
+def set_memory_order(k):
+    """Extend FEATURES with lagged displacements up to order k, in place."""
+    global TRACK_MEMORY_ORDER
+    TRACK_MEMORY_ORDER = int(k)
+    FEATURES[:] = list(_BASE_FEATURES)
+    for j in range(2, TRACK_MEMORY_ORDER + 1):
+        FEATURES.extend([f"u_prev{j}", f"v_prev{j}", f"has_prev{j}"])
+    return FEATURES
+
 
 def load_tracks(path, season_min=1977, season_max=2024, synoptic_only=False,
                 dequantize=True, dequantize_seed=12345):
@@ -134,6 +151,17 @@ def build_transitions(df, step_hours=3.0, tol=0.01, drop_interpolated=True):
     )
     out["is_genesis"] = genesis.astype(float)
     out.loc[genesis, ["u_prev", "v_prev"]] = 0.0
+
+    # Lagged displacements. u_prev{j} is the u_prev of the row j-1 steps back,
+    # and has_prev{j} marks whether that row existed, so the network can tell a
+    # genuine zero from an unavailable one.
+    if TRACK_MEMORY_ORDER > 1:
+        go = out.groupby("SID", sort=False)      # u_prev exists only on `out`
+        for j in range(2, TRACK_MEMORY_ORDER + 1):
+            sh = go["u_prev"].shift(j - 1)
+            out[f"u_prev{j}"] = sh.fillna(0.0)
+            out[f"v_prev{j}"] = go["v_prev"].shift(j - 1).fillna(0.0)
+            out[f"has_prev{j}"] = sh.notna().astype(float)
 
     out["age_h"] = g.cumcount() * step_hours
 
