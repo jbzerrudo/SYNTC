@@ -68,9 +68,8 @@ plotting variants the figures were checked against. Nothing else is included.
 ### The genesis plume
 
 `genesis_forecast.py` writes two files per query, a per-cell passage field and
-every simulated track. It needs `run07/model.pkl`, which the catalogue step
-under *Reproducing the paper* produces; neither the fitted model nor the run
-folders are tracked by git, see `.gitignore`.
+every simulated track. It needs `run07/model.pkl`, which is not in this
+repository; see *Getting the fitted model* under *Reproducing the paper*.
 
 ```
 python genesis_forecast.py --model run07/model.pkl --dtm dtm_phil_1km.tif \
@@ -114,6 +113,16 @@ for the probability field and `--style spaghetti` for tracks alone.
 
 
 ## Reproducing the paper
+
+**Getting the fitted model.** `.gitignore` excludes `*.pkl` and `run0*/`, so
+neither the fitted model nor the catalogues are in this repository or in the
+Zenodo source archive. There are two routes. Rebuild them with the commands
+below, about 23 minutes for the pair, or download `model.pkl` from the release
+assets at https://github.com/jbzerrudo/SYNTC/releases. Prefer the download if
+you want the published numbers to the decimal: a rebuild is seeded and
+reproduces the results within sampling noise, but threaded reductions sum in a
+different order on different hardware, so the refitted weights are
+statistically equivalent rather than bit-identical.
 
 Two catalogues are needed: a stationary control and a warming experiment. They
 differ only in the potential-intensity trend, including the random seed, so any
