@@ -41,6 +41,7 @@ import os
 
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -153,8 +154,58 @@ def land_outline(ax, dtm, zorder=3):
                linewidths=0.6, zorder=zorder)
 
 
+def central_path(df, mode="median", min_frac=0.5):
+    """A single line through the middle of the plume, or (None, None).
+
+    median is a per-step statistic over every surviving realisation, so it is
+    derived from the plume itself rather than from one selected track. That is
+    what makes it the middle of the field, and also what makes it dangerous:
+    where the plume splits into a westward branch and a recurving one, the
+    median position sits between them, in water no realisation ever entered.
+    Off by default for that reason.
+
+    medoid returns a real realisation instead, the one whose own path stays
+    closest to that median path, so it is always a track a storm could follow.
+
+    The line stops once fewer than min_frac of the realisations are still
+    alive, since a median over the surviving few is a median over the
+    longest-lived storms rather than over the ensemble.
+    """
+    if mode == "off":
+        return None, None
+    n0 = df.SID.nunique()
+    steps, mla, mlo = [], [], []
+    for step, g in df.groupby("STEP"):
+        if len(g) < max(20, min_frac * n0):
+            continue
+        steps.append(step)
+        mla.append(float(g.LAT.median()))
+        mlo.append(float(g.LON.median()))
+    if len(steps) < 4:
+        return None, None
+    mla, mlo = np.array(mla), np.array(mlo)
+    if mode == "median":
+        return mlo, mla
+    ref = dict(zip(steps, zip(mla, mlo)))
+    best, best_d = None, np.inf
+    for sid, t in df.groupby("SID", sort=False):
+        t = t[t.STEP.isin(ref)]
+        if len(t) < 0.8 * len(steps):
+            continue
+        a = np.array([ref[st] for st in t.STEP])
+        dy = (t.LAT.to_numpy() - a[:, 0]) * 111.32
+        dx = (t.LON.to_numpy() - a[:, 1]) * 111.32 * np.cos(np.radians(a[:, 0]))
+        d = float(np.hypot(dx, dy).mean())
+        if d < best_d:
+            best, best_d = sid, d
+    if best is None:
+        return mlo, mla
+    t = df[df.SID == best].sort_values("STEP")
+    return t.LON.to_numpy(), t.LAT.to_numpy()
+
+
 def figure(prob, lon_edges, lat_edges, df, lat0, lon0, month, n, path, verts,
-           dtm):
+           dtm, central="off", tracks=60):
     fig, ax = plt.subplots(figsize=(7.6, 6.6), facecolor="white")
     m = np.ma.masked_where(prob.T <= 0, prob.T)
     # The genesis cell is 1.0 by construction and a linear ramp spends the whole
@@ -164,21 +215,36 @@ def figure(prob, lon_edges, lat_edges, df, lat0, lon0, month, n, path, verts,
     pc = ax.pcolormesh(lon_edges, lat_edges, m, cmap=SEQ, shading="flat",
                        norm=matplotlib.colors.PowerNorm(0.45, vmin=0, vmax=1),
                        zorder=1)
-    ids = df.SID.unique()
-    for sid in ids[:: max(1, len(ids) // 60)]:
-        t = df[df.SID == sid].sort_values("STEP")
-        ax.plot(t.LON, t.LAT, color="#0b0b0b", lw=0.3, alpha=0.13, zorder=2)
+    if tracks > 0:
+        ids = df.SID.unique()
+        for sid in ids[:: max(1, len(ids) // tracks)]:
+            t = df[df.SID == sid].sort_values("STEP")
+            ax.plot(t.LON, t.LAT, color="#0b0b0b", lw=0.3, alpha=0.13,
+                    zorder=2)
     land_outline(ax, dtm)
     v = np.array(verts + (verts[0],))
     ax.plot(v[:, 1], v[:, 0], color="#0b3a5c", lw=1.3, ls="--", zorder=5,
             label="PAR")
+    cx, cy = central_path(df, central)
+    if cx is not None:
+        # Same 0.75 weight as the realisations. The white stroke is what makes
+        # it readable over the dark cells, not extra line width.
+        ax.plot(cx, cy, color="#08306b", lw=0.75, zorder=5.5,
+                solid_capstyle="round",
+                path_effects=[pe.withStroke(linewidth=2.05, foreground="white",
+                                            alpha=0.85)],
+                label="middle of the plume" if central == "median"
+                      else "most representative track")
+
     # Genesis marker: a small ringed dot with a crosshair, not a star. The
     # point being marked is a coordinate, and a 17-point star covers about two
     # grid cells of the field it is sitting on, hiding the highest-probability
     # cells in the figure.
-    ax.plot([lon0], [lat0], marker="o", ms=6.5, color="#0b3a5c",
-            markeredgecolor="white", markeredgewidth=1.2, zorder=6,
-            linestyle="none", label="genesis")
+    ax.plot([lon0], [lat0], marker=FS.tc_marker(), ms=26, mfc="none",
+            mec="#0b3a5c", mew=1.35, zorder=6, linestyle="none",
+            label="genesis")
+    ax.plot([lon0], [lat0], marker="o", ms=2.6, color="#0b3a5c", zorder=6.1,
+            linestyle="none")
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
         ax.plot([lon0 + dx * 1.1, lon0 + dx * 2.6],
                 [lat0 + dy * 1.1, lat0 + dy * 2.6],
@@ -219,6 +285,18 @@ def main():
     ap.add_argument("--grid", type=float, default=1.0, help="cell size, degrees")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=".")
+    ap.add_argument("--tracks", type=int, default=60,
+                    help="how many realisations to draw over the field. "
+                         "0 shows the probability field alone, which is the "
+                         "honest object: the field carries the uncertainty, "
+                         "the drawn lines are only a sample of it.")
+    ap.add_argument("--central", default="off",
+                    choices=("off", "median", "medoid"),
+                    help="draw a blue line through the middle of the plume. "
+                         "median is a per-step statistic over all surviving "
+                         "realisations; medoid is the single realisation "
+                         "closest to it. Off by default because a median "
+                         "position is misleading where the plume is bimodal.")
     ap.add_argument("--titles", action="store_true",
                     help="draw the title into the image; off by default so the "
                          "LaTeX caption is the only caption")
@@ -253,7 +331,8 @@ def main():
                   "probability": prob[ii, jj]}).to_csv(
         f"{stem}_passage.csv", index=False)
     figure(prob, lon_edges, lat_edges, df, a.lat, a.lon, a.month, n_used,
-           f"{stem}.png", cfg.par_vertices, a.dtm)
+           f"{stem}.png", cfg.par_vertices, a.dtm,
+           central=a.central, tracks=a.tracks)
     print(f"\nwritten:\n  {stem}.png\n  {stem}.pdf\n  {stem}_tracks.csv"
           f"\n  {stem}_passage.csv")
     print("\nThese are probabilities GIVEN a storm forms at that point in that "
