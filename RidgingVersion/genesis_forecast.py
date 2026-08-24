@@ -107,12 +107,40 @@ def passage_probability(df, lon_edges, lat_edges):
     return hit / max(n, 1), n
 
 
-def summarise(df, seen_par, crossed, lat0, lon0, month, dtm):
+def _in_par(lon, lat, verts):
+    """Point in the PAR polygon. verts are (lat, lon) pairs, as cfg stores them."""
+    inside = False
+    n = len(verts)
+    for i in range(n):
+        y1, x1 = verts[i]
+        y2, x2 = verts[(i + 1) % n]
+        if (x1 > lon) != (x2 > lon):
+            if lat < y1 + (lon - x1) * (y2 - y1) / (x2 - x1):
+                inside = not inside
+    return inside
+
+
+def summarise(df, seen_par, crossed, lat0, lon0, month, dtm,
+              ridge_xy=None, verts=None):
     n = len(seen_par)
     peak = df.groupby("SID").WIND.max()
     print(f"\nA storm forming at {lat0:.1f}N {lon0:.1f}E in {MONTHS[month]}, "
           f"{n:,} realisations\n")
     print(f"  enters PAR                     {100*seen_par.mean():5.1f}%")
+    # Whether the ridge enters PAR is a property of one line, so it is a yes or
+    # a no, not a percentage. Printing it as "100%" beside the figure above
+    # would put two different kinds of quantity in the same column and invite
+    # a reader to treat the crest as a forecast probability. The entry and exit
+    # coordinates are given so the claim can be checked against the map.
+    if ridge_xy is not None and ridge_xy[0] is not None and verts is not None:
+        rx = np.asarray(ridge_xy[0]); ry = np.asarray(ridge_xy[1])
+        ins = [i for i in range(len(rx)) if _in_par(rx[i], ry[i], verts)]
+        if ins:
+            print(f"  ridge (most likely path) enters PAR: yes, "
+                  f"{rx[ins[0]]:.1f}E {ry[ins[0]]:.1f}N to "
+                  f"{rx[ins[-1]]:.1f}E {ry[ins[-1]]:.1f}N")
+        else:
+            print(f"  ridge (most likely path) enters PAR: no")
     print(f"  centre crosses Philippine land {100*crossed.mean():5.1f}%")
 
     par = df[df.IN_PAR == 1]
@@ -780,8 +808,6 @@ def main():
     if not len(df):
         raise SystemExit("no storms survived the first step; check the seed")
 
-    summarise(df, seen_par, crossed, a.lat, a.lon, a.month, a.dtm)
-
     cfg = model.cfg
     lon_edges = np.arange(cfg.lon_min, cfg.lon_max + a.grid, a.grid)
     lat_edges = np.arange(cfg.lat_min, cfg.lat_max + a.grid, a.grid)
@@ -792,6 +818,11 @@ def main():
     ridge_xy = ridge_path(prob, lon_edges, lat_edges, a.lon, a.lat)
     along_ids, n_all = along_ridge(df, ridge_xy[0], ridge_xy[1], a.lon, a.lat,
                                    corridor=a.corridor)
+
+    # after the ridge, so the summary can report whether it enters PAR
+    summarise(df, seen_par, crossed, a.lat, a.lon, a.month, a.dtm,
+              ridge_xy=ridge_xy, verts=cfg.par_vertices)
+
     conditional = (a.field == "corridor" and a.pick == "ridge"
                    and 0 < len(along_ids) < n_all)
     prob_show = prob
