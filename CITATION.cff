@@ -39,7 +39,7 @@ keywords:
   - hazard assessment
 license: MIT
 repository-code: "https://github.com/jbzerrudo/SYNTC"
-version: 1.2.0
+version: 1.2.1
 doi: 10.5281/zenodo.21985553
 references:
   - type: article
@@ -62,4 +62,4 @@ references:
         given-names: Nathaniel T.
     title: "How much do mountains matter? Revisiting the Kaplan-DeMaria model for terrain-dependent tropical cyclone wind decay in the Philippines"
     year: 2026
-date-released: "2026-08-23"
+date-released: "2026-09-03"
