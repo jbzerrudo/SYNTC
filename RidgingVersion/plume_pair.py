@@ -21,6 +21,7 @@ import numpy as np, pandas as pd, matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt, matplotlib.colors as mcolors
 import matplotlib.patheffects as pe
+from matplotlib.lines import Line2D
 import rasterio
 
 # ridge_path, along_ridge and closest_to_ridge live in the ridging genesis
@@ -61,14 +62,11 @@ _ap.add_argument("--note", default="",
                       "describe all realisations, not the drawn subset. \\n for breaks")
 _ap.add_argument("--out", default="genesis_plume_pair")
 _ap.add_argument("--pick", default="core", choices=("core", "random", "spread"),
-                 help="how the drawn realisations are chosen. core (default) "
-                      "ranks by the 10th percentile of passage probability "
-                      "along the path, which selects tracks that never leave "
-                      "the corridor and therefore understates the spread. "
-                      "random draws an unbiased sample. spread clusters the "
-                      "realisations by where they end up and draws one "
-                      "representative per cluster, so the panel shows distinct "
-                      "scenarios rather than one corridor.")
+                 help="IGNORED in this copy. The drawn realisations are always "
+                      "the ones running closest to the ridge, chosen by "
+                      "along_ridge() and closest_to_ridge(); this option is "
+                      "kept only so the two scripts share a command line. Use "
+                      "the repo-root plume_pair.py for core, random or spread.")
 _ap.add_argument("--min-steps", type=int, default=16,
                  help="shortest realisation eligible to be drawn, in 6-hourly "
                       "steps. The default of 16 is four days and matches the "
@@ -81,14 +79,14 @@ _ap.add_argument("--corridor", type=float, default=150.0,
                       "scale, not calibrated against observed tracks.")
 _ap.add_argument("--central", default="ridge",
                  choices=("ridge", "medoid", "mean", "median", "off"),
-                 help="the thick line through the middle of the plume. medoid "
-                      "(default) is a real realisation, the one that stays "
-                      "closest to the ensemble median path, so it is always "
-                      "physically possible. mean and median are per-step "
-                      "statistics and can run between the branches of a "
-                      "bimodal plume, through water no storm visited. off "
-                      "is the DEFAULT here, because this script draws the "
-                      "manuscript figure and its output must not change.")
+                 help="the thick line through the middle of the plume. ridge "
+                      "is the DEFAULT here: the crest of the panel's own "
+                      "passage field. medoid is a real realisation, the one "
+                      "staying closest to the ensemble median path, so it is "
+                      "always physically possible. mean and median are "
+                      "per-step statistics and can run between the branches "
+                      "of a bimodal plume, through water no storm visited. "
+                      "off draws no central line.")
 _ap.add_argument("--cone", action="store_true",
                  help="overlay 50%% and 90%% position containment computed from "
                       "ALL realisations, not the drawn subset. This is the "
@@ -307,7 +305,7 @@ def draw_central(ax, x, y, colour=CENTRAL_COLOR, lw=1.0, z=5.5):
     ax.plot(x, y, color=colour, lw=lw, zorder=z, solid_capstyle="round")
 
 
-def panel(ax, tag, glat, glon, label, nkeep=None, note=""):
+def panel(ax, tag, glat, glon, label, nkeep=None, note="", legend=False):
     p = pd.read_csv(os.path.join(A.gen, tag + "_passage.csv"))
     tr = pd.read_csv(os.path.join(A.gen, tag + "_tracks.csv"))
     lons = np.sort(p.lon.unique()); lats = np.sort(p.lat.unique())
@@ -375,6 +373,21 @@ def panel(ax, tag, glat, glon, label, nkeep=None, note=""):
     ax.grid(which="minor", lw=0.22, color="#ececec", zorder=0)
     ax.set_axisbelow(True)
     north_arrow(ax)
+    if legend:
+        # Identifies the marks only. Counts stay in the caption, so the figure
+        # and the caption cannot drift apart at proof stage.
+        ax.legend(handles=[
+            Line2D([], [], color=TRACK_COLOR, lw=0.9, alpha=0.75,
+                   label="realisations closest to the ridge"),
+            Line2D([], [], color=CENTRAL_COLOR, lw=1.4,
+                   label="ridge of the plume"),
+            Line2D([], [], color="#0b3a5c", lw=1.3, ls="--", label="PAR"),
+            Line2D([], [], color="#0b3a5c", marker="o", ms=6, ls="none",
+                   markeredgecolor="white", markeredgewidth=1.0,
+                   label="genesis"),
+        ], loc="upper right", fontsize=7.6, frameon=True,
+           edgecolor="#8A6F4E", framealpha=0.92, handlelength=1.9,
+           borderpad=0.5, labelspacing=0.45)
     ax.text(0.012, 1.015, label, transform=ax.transAxes, fontsize=11,
             fontweight="bold", va="bottom")
     if note:
@@ -392,7 +405,7 @@ def panel(ax, tag, glat, glon, label, nkeep=None, note=""):
 fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.6, 5.2), facecolor="white",
                                constrained_layout=True)
 pc, nL, tL = panel(axL, A.left,  A.left_pt[0],  A.left_pt[1],  A.left_label,
-                   nkeep=KEEP_L, note=A.note_left)
+                   nkeep=KEEP_L, note=A.note_left, legend=True)
 _,  nR, tR = panel(axR, A.right, A.right_pt[0], A.right_pt[1], A.right_label,
                    nkeep=KEEP_R, note=A.note_right)
 axL.set_ylabel("latitude", fontsize=10)

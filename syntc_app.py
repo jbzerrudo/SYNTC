@@ -18,11 +18,20 @@ from flask import Flask, request, render_template_string, send_from_directory
 
 # ---- configuration -------------------------------------------------------
 REPO   = os.path.dirname(os.path.abspath(__file__))
-MODEL  = r"D:\2026\SYNTC\SYNTC-AI\run07\model.pkl"
+MODEL  = os.environ.get("SYNTC_MODEL", os.path.join(REPO, "model.pkl"))
 DTM    = os.path.join(REPO, "dtm_phil_1km.tif")
 OUTDIR = os.path.join(REPO, "forecast")
 HOST, PORT = "127.0.0.1", 5000
 # --------------------------------------------------------------------------
+
+# The fitted model is not in git: it is a binary and .gitignore excludes *.pkl.
+# Fail here with the reason rather than on the first request with a traceback.
+if not os.path.exists(MODEL):
+    sys.exit(
+        f"fitted model not found: {MODEL}\n"
+        "Set SYNTC_MODEL to its path, or put model.pkl beside this script.\n"
+        "The model ships with the Zenodo deposit linked in README.md."
+    )
 
 app = Flask(__name__)
 MONTHS = ["January","February","March","April","May","June",
