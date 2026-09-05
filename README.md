@@ -27,11 +27,12 @@ plotting variants the figures were checked against. Nothing else is included.
 | file | what it does |
 |---|---|
 | `syntc_ai.py` | the generator, the CLI, and `simulate_from_genesis` |
-| `data.py` | IBTrACS loading, quality control, dequantisation |
+| `data.py` | track-increment training data from full-basin IBTrACS, and the domain bounds |
 | `models.py` | the two mixture density networks |
-| `intensity.py` | intensity evolution and the potential-intensity ceiling |
+| `intensity.py` | intensity evolution, the potential-intensity ceiling, and the IBTrACS intensity loader with its quality control and dequantisation |
 | `terrain.py` | digital terrain model, footprint elevation and land fraction |
 | `figstyle.py` | the shared `--titles` switch for figure output |
+| `windconv.py` | conversion between the 10-minute and 1-minute wind conventions |
 
 **Checks — run these before trusting a catalogue**
 
@@ -48,7 +49,7 @@ plotting variants the figures were checked against. Nothing else is included.
 | file | produces |
 |---|---|
 | `plot_results.py` | hotspots by class and by month, skill summary, intensity distribution |
-| `plot_return_levels.py` | the return-level plot |
+| `plot_return_levels.py` | the standalone return-level plot, superseded in the paper by `make_eva_summary.py` |
 | `plot_filtering.py` | the archipelago filtering measurement |
 | `plot_seasonality.py` | the seasonal cycle of PAR entry |
 | `plot_tracks.py` | the seasonal migration of the track corridor |
@@ -56,7 +57,9 @@ plotting variants the figures were checked against. Nothing else is included.
 | `replot_plume.py` | redraws the plume on a PAR-focused window, from the CSVs the tool already wrote |
 | `make_table_return_periods.py` | Table 1, as LaTeX, straight from the CSV |
 | `make_table_spatial.py` | Table 2, as LaTeX, straight from the CSV |
-| `make_new_figs.py` | the annual-maximum comparison and the saturation-exponent sensitivity |
+| `make_new_figs.py` | the saturation-exponent sensitivity |
+| `make_aoi.py` | Figure 1, the analysis domain, from the terrain model alone |
+| `make_eva_summary.py` | Figure 4, the three-panel extreme value analysis |
 | `make_island_fig.py` | landfall share by island group, and the observed trend |
 | `plume_pair.py` | the two-panel genesis plume, see below |
 | `to_arcgis.py` | reshapes a run for the ArcGIS scripts below |
@@ -155,22 +158,21 @@ hotspot panels), then every plotting script in order.
 
 | paper figure | command |
 |---|---|
-| 1 area of interest | ArcGIS, not scripted |
-| 2 pipeline schematic | drawio, not scripted |
-| 3 wind imputation | `python betaparams_check_finall.py` |
-| 4 intensity distribution | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
-| 5 spatial skill | `python validate_hotspots.py --run run07 --ibtracs IB --dtm DTM` then as above |
-| 6 annual maxima | `python make_new_figs.py --run run07 --ibtracs IB --dtm DTM` |
-| 7 return-period tracks | `python to_arcgis.py --run run07`, then `arcgis_csv2pts2segments.py` |
-| 8 return levels | `python plot_return_levels.py --ibtracs IB --dtm DTM --run run07 --compare` |
-| 9 hotspots by class | `arcgis_hotspot_batch_final.py` |
-| 10 seasonality | `python plot_seasonality.py --run run07 --ibtracs IB --dtm DTM` |
-| 11 island landfall | `python make_island_fig.py --run run07 --ibtracs IB --dtm DTM` |
-| 12 seasonal shift | `python plot_tracks.py --run run07 --ibtracs IB --dtm DTM` |
-| 13 genesis plume | `python genesis_forecast.py --model run07/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 10000`, then `python plume_pair.py --keep 30` |
-| 14 filtering effect | `python plot_filtering.py --run run07 --ibtracs IB --dtm DTM` |
-| 15 hotspots by month | `arcgis_hotspot_batch_final.py` |
-| 16 saturation tradeoff | `python make_new_figs.py --scout scout_k_data` |
+| 1 area of interest | `python make_aoi.py --dtm DTM` |
+| 2 wind imputation and intensity distribution | (a,b) `python betaparams_check_finall.py`; (c) `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
+| 3 spatial skill | `python validate_hotspots.py --run run07 --ibtracs IB --dtm DTM`, then `plot_results.py` as above |
+| 4 extreme value analysis | `python make_eva_summary.py --run run07 --ibtracs IB --dtm DTM` |
+| 5 return-period tracks | `python to_arcgis.py --run run07`, then `arcgis_csv2pts2segments.py` |
+| 6 single-step vs extended-memory | not scripted in this release |
+| 7 hotspots by class | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
+| 8 seasonality | `python plot_seasonality.py --run run07 --ibtracs IB --dtm DTM` |
+| 9 island landfall | `python make_island_fig.py --run run07 --ibtracs IB --dtm DTM` |
+| 10 seasonal shift | `python plot_tracks.py --run run07 --ibtracs IB --dtm DTM` |
+| 11 genesis plume | `python genesis_forecast.py --model run07/model.pkl --dtm DTM --lat 13 --lon 132 --month 10 --n 10000`, then `python plume_pair.py --keep 30 --out genesis_plume_pair_ridge` |
+| 12 filtering effect | `python filtering_effect.py --run run07 --ibtracs IB --dtm DTM`, then `python plot_filtering.py --run run07 --ibtracs IB --dtm DTM` |
+| 13 hotspots by month | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
+| 14 saturation tradeoff | `python make_new_figs.py --scout scout_k_data` |
+| A1 pipeline schematic | drawio, not scripted |
 | Table 1 | `python make_table_return_periods.py --run run07 > tab_return_periods.tex` |
 | Table 2 | `python make_table_spatial.py --run run07 > tab_spatial.tex` |
 
@@ -290,3 +292,4 @@ If you use this code, cite both the software and the paper. For the software
 use the concept DOI, **10.5281/zenodo.21985553**, which always resolves to the
 current version. The release accompanying the paper is v1.0.0,
 10.5281/zenodo.21985554.
+
