@@ -57,6 +57,7 @@ plotting variants the figures were checked against. Nothing else is included.
 | `replot_plume.py` | redraws the plume on a PAR-focused window, from the CSVs the tool already wrote |
 | `make_table_return_periods.py` | Table 1, as LaTeX, straight from the CSV |
 | `make_table_spatial.py` | Table 2, as LaTeX, straight from the CSV |
+| `make_run_compare.py` | Figure 6, both configurations against the observed record |
 | `make_new_figs.py` | the saturation-exponent sensitivity |
 | `make_aoi.py` | Figure 1, the analysis domain, from the terrain model alone |
 | `make_eva_summary.py` | Figure 4, the three-panel extreme value analysis |
@@ -163,7 +164,7 @@ hotspot panels), then every plotting script in order.
 | 3 spatial skill | `python validate_hotspots.py --run run07 --ibtracs IB --dtm DTM`, then `plot_results.py` as above |
 | 4 extreme value analysis | `python make_eva_summary.py --run run07 --ibtracs IB --dtm DTM` |
 | 5 return-period tracks | `python to_arcgis.py --run run07`, then `arcgis_csv2pts2segments.py` |
-| 6 single-step vs extended-memory | not scripted in this release |
+| 6 single-step vs extended-memory | `python make_run_compare.py --from-csv run07_vs_run09.csv --rl-control rl_run07.csv --rl-experiment rl_run09.csv --ibtracs IB --dtm DTM` |
 | 7 hotspots by class | `python plot_results.py --run run07 --ibtracs IB --dtm DTM --grid 1` |
 | 8 seasonality | `python plot_seasonality.py --run run07 --ibtracs IB --dtm DTM` |
 | 9 island landfall | `python make_island_fig.py --run run07 --ibtracs IB --dtm DTM` |
